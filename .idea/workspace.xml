@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="59076439-a907-4374-84e2-b3c28e0bb45d" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitattributes" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.mvn/wrapper/maven-wrapper.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mvnw" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mvnw.cmd" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Config/DotenvConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Config/OpenApiConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Config/SecurityConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Config/WebMvcConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Controllers/AssistantController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Controllers/ImageController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Controllers/ParkingLotController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Controllers/ReservationController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Controllers/UserController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/ApiResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/CreateReservationDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/CustomHourIntervalDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/JwtAuthResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/LoginResponseDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/ParkingLotDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/PasswordResetRequestDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/PriceIntervalDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/ReservationDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/TokenRefreshRequestDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/TokenRefreshResponseDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserLoginDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserPaymentMethodDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserRegistrationDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserUpdateDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/DTOs/UserVehiclePlateDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/AvailabilityTrackingMethod.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/AvailabilityType.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/DayOfWeek.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/ExtensionPricingModel.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/ParkingLotCategory.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/ParkingLotSize.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/ParkingLotStatus.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/ParkingLotType.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/PaymentTiming.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/PricingType.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/TimeUnit.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/ParkingLot/VerificationMethod.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/Reservation/ReservationStatus.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/Reservation/ReservationType.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Enum/User/Role.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/AuthenticationException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/FileProcessingException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/GlobalExceptionHandler.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/InvalidCredentialsException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/InvalidDataException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/ResourceNotFoundException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Exceptions/UserExistsException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/JwtComponents/CurrentUser.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/JwtComponents/JwtAuthenticationEntryPoint.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/JwtComponents/JwtAuthenticationFilter.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/JwtComponents/JwtTokenProvider.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/JwtComponents/UserPrincipal.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/LicentaApplication.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Mappers/ParkingLotMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Mappers/ReservationMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/CustomHourInterval.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/ParkingLot.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/PriceInterval.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/Reservation.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/User.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/UserPaymentMethod.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Models/UserVehiclePlate.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Repositories/ParkingLotRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Repositories/ReservationRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Repositories/UserPaymentMethodRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Repositories/UserRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Repositories/UserVehiclePlateRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/CustomUserDetailsService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/EmailService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/ImageService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/ParkingLotService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/ReservationService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Services/UserService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Utils/YesNoBooleanConverter.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Validators/ParkingLotConstraint.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/licenta/Validators/ParkingLotValidator.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/application.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/256f9f96-d866-4b39-b8ee-0254d2deabde.jpeg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/31e5f775-2f56-41bc-b964-765b23dbf46c.jpeg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/8ec95efa-5a16-4061-92c4-7992b42e86b3.jpeg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/bc06adea-351b-4a87-909d-e729c4ee835c.jpeg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/c4e5b061-b56e-4804-b33a-b836be140d82.jpeg" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Interface" />
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="KubernetesApiProvider">{
+  &quot;isMigrated&quot;: true
+}</component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="MavenImportPreferences">
+    <option name="generalSettings">
+      <MavenGeneralSettings>
+        <option name="mavenHome" value="Use Maven wrapper" />
+      </MavenGeneralSettings>
+    </option>
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2
+}</component>
+  <component name="ProjectId" id="2vC2jAkaB9nbMV3wuyrl1Q2yLjV" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "Spring Boot.LicentaApplication.executor": "Debug",
+    "git-widget-placeholder": "deployment",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "E:/parkfast-backend",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="ReactorSettings">
+    <option name="notificationShown" value="true" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\parkfast-backend" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="LicentaApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="licenta" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="com.example.licenta.LicentaApplication" />
+      <extension name="net.ashald.envfile">
+        <option name="IS_ENABLED" value="true" />
+        <option name="IS_SUBST" value="true" />
+        <option name="IS_PATH_MACRO_SUPPORTED" value="false" />
+        <option name="IS_IGNORE_MISSING_FILES" value="false" />
+        <option name="IS_ENABLE_EXPERIMENTAL_INTEGRATIONS" value="false" />
+        <ENTRIES>
+          <ENTRY IS_ENABLED="true" PARSER="runconfig" IS_EXECUTABLE="false" />
+          <ENTRY IS_ENABLED="true" PARSER="env" IS_EXECUTABLE="false" PATH=".env" />
+        </ENTRIES>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="59076439-a907-4374-84e2-b3c28e0bb45d" name="Changes" comment="" />
+      <created>1743634867862</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1743634867862</updated>
+      <workItem from="1743634868923" duration="1516000" />
+      <workItem from="1743686925407" duration="18385000" />
+      <workItem from="1743707122428" duration="2034000" />
+      <workItem from="1743709459127" duration="96000" />
+      <workItem from="1743715284815" duration="3292000" />
+      <workItem from="1743772665059" duration="9659000" />
+      <workItem from="1743797790558" duration="2242000" />
+      <workItem from="1743829065170" duration="3691000" />
+      <workItem from="1743856706131" duration="14309000" />
+      <workItem from="1743884563909" duration="5385000" />
+      <workItem from="1743944809232" duration="9295000" />
+      <workItem from="1744015231560" duration="13000" />
+      <workItem from="1744016338272" duration="167000" />
+      <workItem from="1744027617116" duration="75000" />
+      <workItem from="1744291567585" duration="2325000" />
+      <workItem from="1744297498455" duration="8000" />
+      <workItem from="1744297526144" duration="2160000" />
+      <workItem from="1744622917396" duration="32000" />
+      <workItem from="1744818383531" duration="16353000" />
+      <workItem from="1744894628416" duration="2869000" />
+      <workItem from="1744923228487" duration="763000" />
+      <workItem from="1744927598384" duration="3000000" />
+      <workItem from="1745086590499" duration="7798000" />
+      <workItem from="1745102293698" duration="11040000" />
+      <workItem from="1745148582565" duration="6971000" />
+      <workItem from="1745369838224" duration="6556000" />
+      <workItem from="1745425142538" duration="13835000" />
+      <workItem from="1745453629116" duration="414000" />
+      <workItem from="1745621850227" duration="2696000" />
+      <workItem from="1745685139370" duration="10641000" />
+      <workItem from="1745702031131" duration="8578000" />
+      <workItem from="1745725748921" duration="140000" />
+      <workItem from="1745758841984" duration="5092000" />
+      <workItem from="1745843044934" duration="7938000" />
+      <workItem from="1745883714204" duration="16000" />
+      <workItem from="1745947587119" duration="3321000" />
+      <workItem from="1745963681838" duration="2793000" />
+      <workItem from="1746103431807" duration="2954000" />
+      <workItem from="1746131084011" duration="2837000" />
+      <workItem from="1746210345825" duration="638000" />
+      <workItem from="1746300637850" duration="7934000" />
+      <workItem from="1746361642232" duration="15156000" />
+      <workItem from="1746475285888" duration="11618000" />
+      <workItem from="1746534858738" duration="3849000" />
+      <workItem from="1746539907163" duration="246000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>
