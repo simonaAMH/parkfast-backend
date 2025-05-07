@@ -109,22 +109,12 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
-			<artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
-			<version>1.0.0-M6</version>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-core</artifactId>
 			<version>1.0.0-M6</version>
 		</dependency>
 		<dependency>
 			<groupId>com.fasterxml.jackson.datatype</groupId>
 			<artifactId>jackson-datatype-jsr310</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.ai</groupId>
-			<artifactId>spring-ai-azure-openai</artifactId>
-			<version>1.0.0-M6</version>
 		</dependency>
 		<dependency>
 			<groupId>io.github.cdimascio</groupId>
@@ -142,6 +132,11 @@
 			<artifactId>spring-cloud-azure-dependencies</artifactId>
 			<version>5.22.0</version>
 			<type>pom</type>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-openai</artifactId>
+			<version>1.0.0-M6</version>
 		</dependency>
 	</dependencies>
 
