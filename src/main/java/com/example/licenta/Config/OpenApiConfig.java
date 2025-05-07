@@ -87,9 +87,7 @@ import org.springframework.util.StringUtils;
 @Configuration
 public class OpenApiConfig {
 
-    // or as an environment variable that Spring Boot automatically picks up.
-    private final String openAiApiKey = System.getenv("OPENAI_API_KEY"); // Recommended for environment variables
-    // Or for system property: System.getProperty("OPENAI_API_KEY");
+    private final String openAiApiKey = System.getenv("OPENAI_API_KEY");
 
     @Bean
     public OpenAiApi openAiApi() {
@@ -101,7 +99,6 @@ public class OpenApiConfig {
 
     @Bean
     public OpenAiChatModel openAiChatModel(OpenAiApi openAiApi) {
-        // You can customize the model and other options here
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model("gpt-4o-mini")
                 .temperature(0.7d)

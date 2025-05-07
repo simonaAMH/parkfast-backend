@@ -2,6 +2,7 @@ package com.example.licenta.Services;
 
 import com.example.licenta.DTOs.CreateReservationDTO;
 import com.example.licenta.DTOs.ReservationDTO;
+import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.Exceptions.InvalidDataException;
@@ -13,6 +14,11 @@ import com.example.licenta.Models.User;
 import com.example.licenta.Repositories.ParkingLotRepository;
 import com.example.licenta.Repositories.ReservationRepository;
 import com.example.licenta.Repositories.UserRepository;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -36,17 +42,20 @@ public class ReservationService {
     private final ParkingLotRepository parkingLotRepository;
     private final UserRepository userRepository;
     private final ReservationMapper reservationMapper;
+    private final OpenAiChatModel openAiChatModel;
     private static final Random random = new Random();
 
     @Autowired
     public ReservationService(ReservationRepository reservationRepository,
                               ParkingLotRepository parkingLotRepository,
                               UserRepository userRepository,
-                              ReservationMapper reservationMapper ) {
+                              ReservationMapper reservationMapper,
+                              OpenAiChatModel openAiChatModel) {
         this.reservationRepository = reservationRepository;
         this.parkingLotRepository = parkingLotRepository;
         this.userRepository = userRepository;
         this.reservationMapper = reservationMapper;
+        this.openAiChatModel = openAiChatModel;
     }
 
     @Transactional
@@ -120,7 +129,6 @@ public class ReservationService {
             throw new InvalidDataException("Start time and end time are required.");
         }
 
-
         ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found: " + parkingLotId));
 
@@ -128,12 +136,78 @@ public class ReservationService {
             throw new InvalidDataException("End time must be after start time.");
         }
 
-        double randomPrice = 1.0 + (100.0 * random.nextDouble());
-        BigDecimal price = BigDecimal.valueOf(randomPrice).setScale(2, RoundingMode.HALF_UP);
-        System.out.println("Generated Mock Price: " + price + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime); // Log for debugging
-        return price;
+        if (parkingLot.getPricingType() == PricingType.DYNAMIC) {
+            try {
+                String systemMessageContent = "You are a parking price prediction assistant. " +
+                        "Given the parking lot details and the requested parking duration, " +
+                        "predict a fair price in RON. Respond ONLY with the numerical price value (e.g., 25.50 or 30).";
+
+                String userMessageContent = String.format(
+                        "Predict the parking price for the following:\n" +
+                                "Parking Lot Name: %s\n" +
+                                "Parking Lot Address: %s\n" +
+                                "Parking Lot Category: %s\n" +
+                                "Total Spots: %d\n" +
+                                "Requested Start Time: %s\n" +
+                                "Requested End Time: %s\n" +
+                                "Current Date and Time (UTC): %s\n" +
+                                "Consider factors like demand, time of day, day of the week, and parking lot features for a dynamic price.",
+                        parkingLot.getId(),
+                        parkingLot.getName(),
+                        parkingLot.getAddress(),
+                        parkingLot.getCategory() != null ? parkingLot.getCategory().name() : "N/A",
+                        parkingLot.getTotalSpots() != null ? parkingLot.getTotalSpots() : 0,
+                        startTime.toString(),
+                        endTime.toString(),
+                        OffsetDateTime.now().toString()
+                );
+
+                Prompt prompt = new Prompt(List.of(
+                        new SystemMessage(systemMessageContent),
+                        new UserMessage(userMessageContent)
+                ));
+
+                ChatResponse response = openAiChatModel.call(prompt);
+                String predictedPriceStr = null;
+                if (response != null && response.getResult() != null && response.getResult().getOutput() != null) {
+                    predictedPriceStr = response.getResult().getOutput().getText().trim();
+                }
+
+                if (predictedPriceStr != null && !predictedPriceStr.isEmpty()) {
+                    String cleanedPriceStr = predictedPriceStr.replaceAll("[^0-9.]", "");
+                    if (cleanedPriceStr.isEmpty() || cleanedPriceStr.equals(".")) {
+                        System.err.println("AI model returned an invalid numeric string after cleaning: '" + predictedPriceStr + "'. Falling back to random price.");
+                        return generateRandomPrice(parkingLotId, startTime, endTime);
+                    }
+                    try {
+                        BigDecimal predictedPrice = new BigDecimal(cleanedPriceStr).setScale(2, RoundingMode.HALF_UP);
+                        System.out.println("AI Predicted Price: " + predictedPrice + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime);
+                        return predictedPrice;
+                    } catch (NumberFormatException e) {
+                        System.err.println("Failed to parse AI predicted price: '" + cleanedPriceStr + "'. Error: " + e.getMessage() + ". Falling back to random price.");
+                        return generateRandomPrice(parkingLotId, startTime, endTime);
+                    }
+                } else {
+                    System.err.println("AI model did not return a valid price string. Falling back to random price.");
+                    return generateRandomPrice(parkingLotId, startTime, endTime);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Error calling OpenAI model for dynamic pricing: " + e.getMessage());
+                return generateRandomPrice(parkingLotId, startTime, endTime);
+            }
+        } else {
+            System.out.println("Pricing type is not DYNAMIC (" + parkingLot.getPricingType() + "). Using fallback price generation.");
+            return generateRandomPrice(parkingLotId, startTime, endTime);
+        }
     }
 
+    private BigDecimal generateRandomPrice(Long parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+        double randomPriceValue = 1.0 + (100.0 * random.nextDouble());
+        BigDecimal price = BigDecimal.valueOf(randomPriceValue).setScale(2, RoundingMode.HALF_UP);
+        System.out.println("Generated Fallback/Mock Price: " + price + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime);
+        return price;
+    }
 
     @Transactional(readOnly = true)
     public Page<ReservationDTO> getReservationsByUserId(Long userId, List<ReservationType> types, Pageable pageable) {

@@ -35,6 +35,8 @@ public class ParkingLotMapper {
         dto.setTimeAfterReservation(parkingLot.getTimeAfterReservation());
         dto.setMinParkingDuration(parkingLot.getMinParkingDuration());
         dto.setMaxParkingDuration(parkingLot.getMaxParkingDuration());
+        dto.setMinParkingDurationUnit(parkingLot.getMinParkingDurationUnit());
+        dto.setMaxParkingDurationUnit(parkingLot.getMaxParkingDurationUnit());
         dto.setFreeTimeMinutes(parkingLot.getFreeTimeMinutes());
         dto.setBankAccountName(parkingLot.getBankAccountName());
         dto.setBankAccountNumber(parkingLot.getBankAccountNumber());
@@ -138,6 +140,8 @@ public class ParkingLotMapper {
         if (dto.getTimeAfterReservation() != null) entity.setTimeAfterReservation(dto.getTimeAfterReservation());
         if (dto.getMinParkingDuration() != null) entity.setMinParkingDuration(dto.getMinParkingDuration());
         if (dto.getMaxParkingDuration() != null) entity.setMaxParkingDuration(dto.getMaxParkingDuration());
+        if (dto.getMinParkingDurationUnit() != null) entity.setMinParkingDurationUnit(dto.getMinParkingDurationUnit());
+        if (dto.getMaxParkingDurationUnit() != null) entity.setMaxParkingDurationUnit(dto.getMaxParkingDurationUnit());
         if (dto.getFreeTimeMinutes() != null) entity.setFreeTimeMinutes(dto.getFreeTimeMinutes());
         if (dto.getBankAccountName() != null) entity.setBankAccountName(dto.getBankAccountName());
         if (dto.getBankAccountNumber() != null) entity.setBankAccountNumber(dto.getBankAccountNumber());
