@@ -100,7 +100,7 @@ public class OpenApiConfig {
     @Bean
     public OpenAiChatModel openAiChatModel(OpenAiApi openAiApi) {
         OpenAiChatOptions options = OpenAiChatOptions.builder()
-                .model("gpt-4o-mini")
+                .model("gpt-3.5-turbo")
                 .temperature(0.7d)
                 .maxTokens(1000)
                 .build();

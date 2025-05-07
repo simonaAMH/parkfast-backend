@@ -138,21 +138,23 @@ public class ReservationService {
 
         if (parkingLot.getPricingType() == PricingType.DYNAMIC) {
             try {
-                String systemMessageContent = "You are a parking price prediction assistant. " +
+                String systemMessageContent = "You are a parking price calculator." +
                         "Given the parking lot details and the requested parking duration, " +
-                        "predict a fair price in RON. Respond ONLY with the numerical price value (e.g., 25.50 or 30).";
+                        "predict a fair market price in RON (Romanian Leu). Parking is generally not free. " +
+                        "Respond ONLY with the numerical price value (e.g., 25.50 or 30). Do not provide any other text or explanation. " +
+                        "For context, a short stay (1-2 hours) in a central urban lot might be 5-20 RON, while a longer stay in a peripheral lot might be 5-15 RON per few hours. " +
+                        "If you cannot determine a price, respond with a typical small non-zero placeholder like 10.00 rather than 0.00.";
 
                 String userMessageContent = String.format(
                         "Predict the parking price for the following:\n" +
                                 "Parking Lot Name: %s\n" +
-                                "Parking Lot Address: %s\n" +
+                                "Parking Lot Address (is in Romania): %s\n" +
                                 "Parking Lot Category: %s\n" +
                                 "Total Spots: %d\n" +
                                 "Requested Start Time: %s\n" +
                                 "Requested End Time: %s\n" +
                                 "Current Date and Time (UTC): %s\n" +
                                 "Consider factors like demand, time of day, day of the week, and parking lot features for a dynamic price.",
-                        parkingLot.getId(),
                         parkingLot.getName(),
                         parkingLot.getAddress(),
                         parkingLot.getCategory() != null ? parkingLot.getCategory().name() : "N/A",
