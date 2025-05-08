@@ -102,7 +102,7 @@ public class OpenApiConfig {
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model("gpt-3.5-turbo")
                 .temperature(0.7d)
-                .maxTokens(1000)
+                .maxTokens(100)
                 .build();
 
         return new OpenAiChatModel(openAiApi, options);
