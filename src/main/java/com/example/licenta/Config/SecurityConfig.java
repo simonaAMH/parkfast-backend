@@ -73,6 +73,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/.well-known/**",
                                 "/api/users/register",
                                 "/api/users/login",
                                 "/api/users/verify-email",
