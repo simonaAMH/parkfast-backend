@@ -21,7 +21,7 @@ public class EmailService {
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
-    @Value("${app.email.from}")
+    @Value("${spring.mail.username}")
     private String fromEmail;
 
     @Value("${app.name}")
