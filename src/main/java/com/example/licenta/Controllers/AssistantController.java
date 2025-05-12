@@ -50,9 +50,9 @@ public class AssistantController {
     @PostMapping("/chat")
     public ResponseEntity<Map<String, String>> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
-        String existingThreadId = request.get("threadId"); // Get threadId from request, might be null
+        String existingThreadId = request.get("threadId");
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String currentThreadId = existingThreadId; // Will hold the thread ID used for this interaction
+        String currentThreadId = existingThreadId;
 
         Map<String, String> errorResponseBoilerplate = new HashMap<>();
         errorResponseBoilerplate.put("timestamp", timestamp);
@@ -74,10 +74,8 @@ public class AssistantController {
                 System.out.println("New thread created with Id: " + currentThreadId);
             } else {
                 System.out.println("Continuing with existing threadId: " + currentThreadId);
-                // Optionally, you could add a check here to verify the thread exists on OpenAI
-                // For now, we assume if a threadId is passed, it's intended to be used.
             }
-            assistantService.recordThreadActivity(currentThreadId); // Record/update activity for the thread
+            assistantService.recordThreadActivity(currentThreadId);
 
             // 2. Add message to thread (using currentThreadId)
             Map<String, Object> messageBody = Map.of(
@@ -85,24 +83,20 @@ public class AssistantController {
                     "content", userMessage
             );
             HttpEntity<Map<String, Object>> messageRequestEntity = new HttpEntity<>(messageBody, headers);
-            // Check if the thread exists before adding a message if it's an existing threadId
             try {
                 restTemplate.postForEntity(
                         "https://api.openai.com/v1/threads/" + currentThreadId + "/messages", messageRequestEntity, Map.class);
             } catch (HttpClientErrorException e) {
                 if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                     System.err.println("Error: Thread with ID " + currentThreadId + " not found when trying to add message. A new thread will be implicitly created by OpenAI if we proceed, or handle as error.");
-                    // To be robust, you might want to force create a new thread here or return a specific error.
-                    // For this example, we'll let it be caught by the generic exception handler if subsequent calls fail.
-                    // Or, more directly:
                     errorResponseBoilerplate.put("response", "Error: Provided conversation thread ID " + currentThreadId + " was not found.");
-                    errorResponseBoilerplate.put("threadId", currentThreadId); // include the problematic threadId
+                    errorResponseBoilerplate.put("threadId", currentThreadId);
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponseBoilerplate);
                 }
-                throw e; // Re-throw other client errors
+                throw e;
             }
 
-            assistantService.recordThreadActivity(currentThreadId); // Update activity
+            assistantService.recordThreadActivity(currentThreadId);
 
             // 3. Run the assistant (using currentThreadId)
             Map<String, Object> runBody = Map.of("assistant_id", this.assistantId);
@@ -121,8 +115,7 @@ public class AssistantController {
             // 4. Poll until run completes (using currentThreadId and runId)
             String runStatus;
             long startTime = System.currentTimeMillis();
-            // Increased polling timeout slightly for potentially longer "thinking" times in an ongoing conversation
-            long timeoutMillis = 90000; // 90 seconds polling timeout
+            long timeoutMillis = 90000;
 
             do {
                 if (System.currentTimeMillis() - startTime > timeoutMillis) {
@@ -145,13 +138,12 @@ public class AssistantController {
                 }
                 runStatus = (String) statusResponseEntity.getBody().get("status");
                 if ("failed".equalsIgnoreCase(runStatus) || "cancelled".equalsIgnoreCase(runStatus) || "expired".equalsIgnoreCase(runStatus) || "requires_action".equalsIgnoreCase(runStatus)) {
-                    assistantService.recordThreadActivity(currentThreadId); // Still record activity on failure
+                    assistantService.recordThreadActivity(currentThreadId);
                     errorResponseBoilerplate.put("response", "Error: Run ended with status: " + runStatus);
                     errorResponseBoilerplate.put("threadId", currentThreadId);
-                    // You might want to inspect runResponseEntity.getBody().get("last_error") here for more details
                     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponseBoilerplate);
                 }
-                assistantService.recordThreadActivity(currentThreadId); // Keep updating activity while polling
+                assistantService.recordThreadActivity(currentThreadId);
             } while (!"completed".equals(runStatus));
 
 
@@ -175,8 +167,8 @@ public class AssistantController {
 
             // Find the latest assistant message
             String rawAssistantReply = messages.stream()
-                    .filter(m -> "assistant".equals(m.get("role"))) // Filter for assistant messages
-                    .findFirst() // Get the most recent one (because of order=desc)
+                    .filter(m -> "assistant".equals(m.get("role")))
+                    .findFirst()
                     .map(m -> {
                         List<Map<String, Object>> contentParts = (List<Map<String, Object>>) m.get("content");
                         if (contentParts != null && !contentParts.isEmpty()) {
@@ -200,7 +192,7 @@ public class AssistantController {
             Map<String, String> successResponse = new HashMap<>();
             successResponse.put("response", assistantReply);
             successResponse.put("timestamp", timestamp);
-            successResponse.put("threadId", currentThreadId); // Include the threadId in the successful response
+            successResponse.put("threadId", currentThreadId);
 
             return ResponseEntity.ok(successResponse);
 
@@ -211,16 +203,15 @@ public class AssistantController {
             if (currentThreadId != null) errorResponseBoilerplate.put("threadId", currentThreadId);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponseBoilerplate);
         } catch (HttpClientErrorException e) {
-            // Catch specific OpenAI API client errors
             e.printStackTrace();
-            System.err.println("Chat failed (HttpClientErrorException) for user message: " + userMessage + (currentThreadId != null ? ", threadId: " + currentThreadId : "") + " - Status: " + e.getStatusCode() + " Body: " + e.getResponseBodyAsString());
+            System.err.println("Chat failed for user message: " + userMessage + (currentThreadId != null ? ", threadId: " + currentThreadId : "") + " - Status: " + e.getStatusCode() + " Body: " + e.getResponseBodyAsString());
             errorResponseBoilerplate.put("response", "Error communicating with AI service: " + e.getStatusCode() + (e.getResponseBodyAsString().contains("No active run") ? " (No active run on thread)" : ""));
             if (currentThreadId != null) errorResponseBoilerplate.put("threadId", currentThreadId);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponseBoilerplate);
         }
         catch (Exception e) {
             e.printStackTrace();
-            System.err.println("Chat failed (Exception) for user message: " + userMessage + (currentThreadId != null ? ", threadId: " + currentThreadId : "") + " - " + e.getMessage());
+            System.err.println("Chat failed for user message: " + userMessage + (currentThreadId != null ? ", threadId: " + currentThreadId : "") + " - " + e.getMessage());
             errorResponseBoilerplate.put("response", "Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             if (currentThreadId != null) errorResponseBoilerplate.put("threadId", currentThreadId);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponseBoilerplate);
