@@ -1,6 +1,7 @@
 package com.example.licenta.Controllers;
 
 import com.example.licenta.DTOs.ApiResponse;
+import com.example.licenta.DTOs.ClosestParkingLotInfoDTO;
 import com.example.licenta.DTOs.ParkingLotDTO;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Exceptions.InvalidDataException;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -42,7 +44,70 @@ public class ParkingLotController {
         this.parkingLotMapper = parkingLotMapper;
     }
 
-    @PostMapping
+    @GetMapping("/check-location-proximity")
+    public ResponseEntity<ApiResponse<ClosestParkingLotInfoDTO>> checkUserProximityToClosestLot(
+            @RequestParam double latitude,
+            @RequestParam double longitude,
+            @RequestParam(defaultValue = "100.0") double proximityRadius) {
+
+        if (proximityRadius <= 0) {
+            throw new InvalidDataException("Proximity radius must be a positive value.");
+        }
+
+        Optional<ClosestParkingLotInfoDTO> closestLotInfoOpt = parkingLotService.findClosestParkingLotInProximity(latitude, longitude, proximityRadius);
+
+        if (closestLotInfoOpt.isPresent()) {
+            ApiResponse<ClosestParkingLotInfoDTO> response = new ApiResponse<>(
+                    true,
+                    HttpStatus.OK.value(),
+                    "Closest parking lot in proximity found.",
+                    closestLotInfoOpt.get()
+            );
+            return ResponseEntity.ok(response);
+        } else {
+            ApiResponse<ClosestParkingLotInfoDTO> response = new ApiResponse<>(
+                    true,
+                    HttpStatus.OK.value(),
+                    "User is not in proximity of any known active parking lot.",
+                    null
+            );
+            return ResponseEntity.ok(response);
+        }
+    }
+
+    @GetMapping("/check-location-inside")
+    public ResponseEntity<ApiResponse<Long>> checkUserLocationInsideParkingLot(
+                                                                                @RequestParam double latitude,
+                                                                                @RequestParam double longitude,
+                                                                                @RequestParam double accuracy) {
+
+        if (accuracy <= 0) {
+            throw new InvalidDataException("Accuracy must be a positive value.");
+        }
+
+        Optional<ParkingLot> foundLotOpt = parkingLotService.findParkingLotAtUserLocation(latitude, longitude, accuracy);
+
+        if (foundLotOpt.isPresent()) {
+            Long parkingLotId = foundLotOpt.get().getId();
+            ApiResponse<Long> response = new ApiResponse<>(
+                    true,
+                    HttpStatus.OK.value(),
+                    "User is inside this parking lot",
+                    parkingLotId
+            );
+            return ResponseEntity.ok(response);
+        } else {
+            ApiResponse<Long> response = new ApiResponse<>(
+                    true,
+                    HttpStatus.OK.value(),
+                    "User is not inside any known active parking lot",
+                    null
+            );
+            return ResponseEntity.ok(response);
+        }
+    }
+
+        @PostMapping
     public ResponseEntity<ApiResponse<?>> createParkingLot(@Valid @RequestBody ParkingLotDTO parkingLotDTO) {
         ParkingLot parkingLot = parkingLotService.createParkingLot(parkingLotDTO, parkingLotDTO.getOwnerId());
         ParkingLotDTO responseDTO = parkingLotMapper.toDTO(parkingLot);
@@ -255,4 +320,6 @@ public class ParkingLotController {
         ApiResponse<Map<String, Object>> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Parking lots allowing any reservation retrieved successfully", responseData);
         return ResponseEntity.ok(response);
     }
+
+
 }

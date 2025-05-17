@@ -1,5 +1,6 @@
 package com.example.licenta.Repositories;
 
+import com.example.licenta.Enum.ParkingLot.ParkingLotStatus;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.User;
@@ -10,11 +11,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface ParkingLotRepository extends JpaRepository<ParkingLot, Long> {
 
     Page<ParkingLot> findByOwner(User owner, Pageable pageable);
     Page<ParkingLot> findByAllowDirectPaymentTrue(Pageable pageable);
+    List<ParkingLot> findByStatus(ParkingLotStatus status);
 
     Page<ParkingLot> findByAllowReservationsTrue(Pageable pageable);
 
@@ -24,7 +28,7 @@ public interface ParkingLotRepository extends JpaRepository<ParkingLot, Long> {
 
     @Query(value = "SELECT * FROM parking_lots p " +
             "WHERE p.gps_coordinates IS NOT NULL " +
-            //"AND p.status = 'ACTIVE' " +
+            "AND p.status = 'ACTIVE' " +
             "AND (6371 * acos(" +
             "    cos(radians(:latitude)) * " +
             "    cos(radians(CAST(trim(split_part(p.gps_coordinates, ',', 1)) AS DOUBLE PRECISION))) * " +
