@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -51,7 +51,7 @@ public class AssistantController {
     public ResponseEntity<Map<String, String>> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
         String existingThreadId = request.get("threadId");
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String currentThreadId = existingThreadId;
 
         Map<String, String> errorResponseBoilerplate = new HashMap<>();

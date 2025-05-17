@@ -5,7 +5,6 @@ import com.example.licenta.Enum.Reservation.ReservationType;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 @Data
@@ -27,6 +26,6 @@ public class ReservationDTO {
     private ReservationType reservationType;
     private ReservationStatus status;
     private String qrCodeData;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

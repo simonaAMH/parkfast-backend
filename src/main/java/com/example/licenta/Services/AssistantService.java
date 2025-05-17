@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,7 +19,7 @@ public class AssistantService {
     private final String openAiApiKey;
     private final HttpHeaders deleteHeaders;
 
-    private final Map<String, LocalDateTime> threadActivityMap = new ConcurrentHashMap<>();
+    private final Map<String, OffsetDateTime> threadActivityMap = new ConcurrentHashMap<>();
 
     public AssistantService(RestTemplate restTemplate,
                             @Value("${openai.api.key}") String openAiApiKey) {
@@ -31,7 +31,7 @@ public class AssistantService {
     }
 
     public void recordThreadActivity(String threadId) {
-        threadActivityMap.put(threadId, LocalDateTime.now());
+        threadActivityMap.put(threadId, OffsetDateTime.now());
     }
 
     private void deleteThread(String threadId) {
@@ -51,7 +51,7 @@ public class AssistantService {
 
     @Scheduled(fixedRate = 300000)
     public void cleanUpInactiveThreads() {
-        LocalDateTime now = LocalDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now();
         System.out.println("Running cleanup task for inactive threads at " + now);
         threadActivityMap.entrySet().removeIf(entry -> {
             boolean shouldRemove = Duration.between(entry.getValue(), now).toMinutes() >= 5;

@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Data
 @NoArgsConstructor
@@ -17,5 +17,5 @@ public class NotificationDTO {
     private String type;
     private String referenceId;
     private boolean isRead;
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 }

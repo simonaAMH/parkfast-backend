@@ -8,7 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -140,8 +140,8 @@ public class ParkingLotDTO {
     private ParkingLotStatus status;
 
     private Integer spotsAvailable;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 
     @Valid
     private List<@Valid CustomHourIntervalDTO> customHourIntervals;

@@ -4,7 +4,7 @@ import com.example.licenta.Enum.User.Role;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Data
 @NoArgsConstructor
@@ -18,6 +18,6 @@ public class UserDTO {
     private Role role;
     private Integer loyaltyPoints;
     private boolean emailVerified;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

@@ -18,7 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,8 +49,8 @@ public class ParkingLotService {
 
         ParkingLot parkingLot = parkingLotMapper.toEntity(dto);
         parkingLot.setOwner(owner);
-        parkingLot.setCreatedAt(LocalDateTime.now());
-        parkingLot.setUpdatedAt(LocalDateTime.now());
+        parkingLot.setCreatedAt(OffsetDateTime.now());
+        parkingLot.setUpdatedAt(OffsetDateTime.now());
         //parkingLot.setStatus(ParkingLotStatus.PENDING_APPROVAL);
         parkingLot.setStatus(ParkingLotStatus.ACTIVE);
         parkingLot.setSpotsAvailable(parkingLot.getTotalSpots());
@@ -68,7 +68,7 @@ public class ParkingLotService {
         }
 
         parkingLotMapper.updateEntityFromDTO(dto, existingParkingLot);
-        existingParkingLot.setUpdatedAt(LocalDateTime.now());
+        existingParkingLot.setUpdatedAt(OffsetDateTime.now());
 
         return parkingLotRepository.save(existingParkingLot);
     }

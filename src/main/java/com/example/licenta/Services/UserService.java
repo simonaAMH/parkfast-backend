@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -66,8 +66,8 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
         user.setRole(role);
         user.setEmailVerified(false);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setCreatedAt(OffsetDateTime.now());
+        user.setUpdatedAt(OffsetDateTime.now());
 
         if (userDTO.getProfileImage() != null && !userDTO.getProfileImage().isEmpty()) {
             try {
@@ -83,7 +83,7 @@ public class UserService {
 
         String token = generateToken();
         user.setEmailVerificationToken(token);
-        user.setTokenExpiry(LocalDateTime.now().plusDays(1));
+        user.setTokenExpiry(OffsetDateTime.now().plusDays(1));
 
         User savedUser = userRepository.save(user);
 
@@ -122,7 +122,7 @@ public class UserService {
 
         String token = generateToken();
         user.setPasswordResetToken(token);
-        user.setTokenExpiry(LocalDateTime.now().plusHours(1));
+        user.setTokenExpiry(OffsetDateTime.now().plusHours(1));
         userRepository.save(user);
 
         emailService.sendPasswordResetEmail(user.getEmail(), token);
@@ -133,7 +133,7 @@ public class UserService {
         User user = userRepository.findByPasswordResetToken(token)
                 .orElseThrow(() -> new AuthenticationException("Invalid password reset token"));
 
-        if (user.getTokenExpiry().isBefore(LocalDateTime.now())) {
+        if (user.getTokenExpiry().isBefore(OffsetDateTime.now())) {
             throw new AuthenticationException("Token has expired");
         }
 
@@ -150,7 +150,7 @@ public class UserService {
 
         String token = generateToken();
         user.setAccountDeletionToken(token);
-        user.setTokenExpiry(LocalDateTime.now().plusHours(1));
+        user.setTokenExpiry(OffsetDateTime.now().plusHours(1));
         userRepository.save(user);
 
         emailService.sendAccountDeletionEmail(user.getEmail(), token);
@@ -194,7 +194,7 @@ public class UserService {
                 user.setEmailVerified(false);
                 String token = generateToken();
                 user.setEmailVerificationToken(token);
-                user.setTokenExpiry(LocalDateTime.now().plusDays(1));
+                user.setTokenExpiry(OffsetDateTime.now().plusDays(1));
                 emailService.sendVerificationEmail(updateDto.getEmail(), token);
             }
         }
@@ -235,7 +235,7 @@ public class UserService {
 
         String token = generateToken();
         user.setEmailVerificationToken(token);
-        user.setTokenExpiry(LocalDateTime.now().plusDays(1));
+        user.setTokenExpiry(OffsetDateTime.now().plusDays(1));
         userRepository.save(user);
 
         emailService.sendVerificationEmail(user.getEmail(), token);
@@ -256,7 +256,7 @@ public class UserService {
 
         int newPointsBalance = user.getLoyaltyPoints() - pointsToUse;
         user.setLoyaltyPoints(newPointsBalance);
-        user.setUpdatedAt(LocalDateTime.now());
+        user.setUpdatedAt(OffsetDateTime.now());
 
         return userRepository.save(user);
     }
