@@ -5,6 +5,8 @@ import com.example.licenta.DTOs.CreateReservationDTO;
 import com.example.licenta.DTOs.ReservationDTO;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.Exceptions.InvalidDataException;
+import com.example.licenta.Exceptions.ResourceNotFoundException;
 import com.example.licenta.Services.ReservationService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +49,15 @@ public class ReservationController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ReservationDTO>> getReservationById(@PathVariable Long id) {
         ReservationDTO reservationDTO = reservationService.getReservationById(id);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Reservation retrieved successfully", reservationDTO);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/guest-access")
+    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationByIdForGuest(
+            @PathVariable Long id,
+            @RequestParam String token) {
+        ReservationDTO reservationDTO = reservationService.getReservationByIdForGuest(id, token);
         ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Reservation retrieved successfully", reservationDTO);
         return ResponseEntity.ok(response);
     }

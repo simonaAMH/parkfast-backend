@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -133,11 +134,16 @@ public class EmailService {
         }
     }
 
-    public boolean sendReservationConfirmationEmail(String toEmail, Long reservationId, String parkingLotName,
+    public boolean sendReservationConfirmationEmail(String toEmail, String userRole, Long reservationId, String parkingLotName,
                                                     OffsetDateTime startTime, OffsetDateTime endTime,
-                                                    BigDecimal amountPaid) {
+                                                    BigDecimal amountPaid, @Nullable String guestAccessToken) {
         String subject = appName + ": Reservation Confirmed & Paid";
-        String viewReservationLink = frontendUrl + "/reservation/" + reservationId;
+        String baseLink = frontendUrl + "/reservation/" + reservationId;
+
+        String viewReservationLink = baseLink;
+        if (guestAccessToken != null && !guestAccessToken.isEmpty()) {
+            viewReservationLink += "?access_token=" + guestAccessToken;
+        }
 
         String htmlContent =
                 "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
@@ -149,14 +155,15 @@ public class EmailService {
                         "<p style='color: #555; line-height: 1.5;'>Thank you for your payment. Your parking reservation is confirmed.</p>" +
                         "<p style='color: #555; line-height: 1.5;'><strong>Reservation ID:</strong> " + reservationId + "</p>" +
                         "<p style='color: #555; line-height: 1.5;'><strong>Parking Lot:</strong> " + parkingLotName + "</p>" +
-                        "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + "</p>" +
-                        (endTime != null ? "<p style='color: #555; line-height: 1.5;'><strong>End Time:</strong> " + formatDateTimeForEmail(endTime) + "</p>" : "") +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + " (GMT+03:00)</p>" +
+                        (endTime != null ? "<p style='color: #555; line-height: 1.5;'><strong>End Time:</strong> " + formatDateTimeForEmail(endTime) + " (GMT+03:00)</p>" : "") +
                         "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + (amountPaid != null ? amountPaid.setScale(2, RoundingMode.HALF_UP).toString() : "0.00") + " RON</p>" +
                         "<div style='text-align: center; margin: 30px 0;'>" +
                         "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View Reservation</a>" +
                         "</div>" +
                         "<p style='color: #555; line-height: 1.5;'>You can view your reservation details by clicking the button above or by copying this link into your browser: " +
                         "<span style='background-color: #e0e0e0; padding: 5px; border-radius: 3px; word-break: break-all;'>" + viewReservationLink + "</span></p>" +
+                        (guestAccessToken != null && !guestAccessToken.isEmpty() ? "<p style='color: #777; font-size: 12px; line-height: 1.4;'><i>This special access link will expire approximately 1 hour after your reservation end time.</i></p>" : "") +
                         "</div>" +
                         "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 20px;'>" +
                         "<p>If you have any questions, please contact our support.</p>" +

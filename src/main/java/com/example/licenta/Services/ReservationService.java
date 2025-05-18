@@ -8,9 +8,11 @@ import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.Exceptions.InvalidDataException;
 import com.example.licenta.Exceptions.ResourceNotFoundException;
 import com.example.licenta.Mappers.ReservationMapper;
+import com.example.licenta.Models.GuestAccessToken;
 import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.Reservation;
 import com.example.licenta.Models.User;
+import com.example.licenta.Repositories.GuestAccessTokenRepository;
 import com.example.licenta.Repositories.ParkingLotRepository;
 import com.example.licenta.Repositories.ReservationRepository;
 import com.example.licenta.Repositories.UserRepository;
@@ -29,8 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.Random;
 import java.math.RoundingMode;
@@ -45,6 +49,7 @@ public class ReservationService {
     private final OpenAiChatModel openAiChatModel;
     private final EmailService emailService;
     private static final Random random = new Random();
+    private final GuestAccessTokenRepository guestAccessTokenRepository;
 
     @Autowired
     public ReservationService(ReservationRepository reservationRepository,
@@ -52,13 +57,15 @@ public class ReservationService {
                               UserRepository userRepository,
                               ReservationMapper reservationMapper,
                               OpenAiChatModel openAiChatModel,
-                              EmailService emailService) {
+                              EmailService emailService,
+                              GuestAccessTokenRepository guestAccessTokenRepository) {
         this.reservationRepository = reservationRepository;
         this.parkingLotRepository = parkingLotRepository;
         this.userRepository = userRepository;
         this.reservationMapper = reservationMapper;
         this.openAiChatModel = openAiChatModel;
         this.emailService = emailService;
+        this.guestAccessTokenRepository = guestAccessTokenRepository;
     }
 
 
@@ -370,14 +377,17 @@ public class ReservationService {
             throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not in PENDING_PAYMENT status. Current status: " + reservation.getStatus());
         }
 
-        String recipientEmail = reservation.getUser() != null && reservation.getUser().getEmail() != null ?
-                reservation.getUser().getEmail() : reservation.getGuestEmail();
+        User user = reservation.getUser();
+        String userRole = (user != null && user.getRole() != null) ? user.getRole().name() : null;
 
-        // Case 1: Initial activation of PAY_FOR_USAGE (card verification)
+        String recipientEmail = (user != null && user.getEmail() != null) ?
+                user.getEmail() : reservation.getGuestEmail();
+
+        String guestAccessToken = null;
+
+        // (card verification)
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             reservation.setStatus(ReservationStatus.ACTIVE);
-            // finalAmount here is typically 0 or reflects points used for activation incentives, not actual usage cost.
-            // No earnings update at this stage for PAY_FOR_USAGE activation.
             Reservation updatedReservation = reservationRepository.save(reservation);
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendPayForUsageActiveEmail(
@@ -388,13 +398,10 @@ public class ReservationService {
                 );
             }
             return reservationMapper.toDTO(updatedReservation);
-
-        } else { // Case 2: Actual payment for STANDARD, DIRECT, or an ENDED PAY_FOR_USAGE, or a free STANDARD
+        } else {
             User owner = parkingLot.getOwner();
             BigDecimal amountPaid = reservation.getFinalAmount();
 
-            // For free STANDARD or points-covered, amountPaid can be 0.
-            // For paid reservations, it must be >= 0.
             if (amountPaid == null) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a final amount for payment processing.");
             }
@@ -403,6 +410,17 @@ public class ReservationService {
             }
 
             reservation.setStatus(ReservationStatus.PAID);
+
+            if (user == null && reservation.getEndTime() != null) {
+                guestAccessToken = UUID.randomUUID().toString();
+                GuestAccessToken tokenEntity = GuestAccessToken.builder()
+                        .token(guestAccessToken)
+                        .reservation(reservation)
+                        .expiresAt(reservation.getEndTime().plus(1, ChronoUnit.HOURS))
+                        .build();
+                guestAccessTokenRepository.save(tokenEntity);
+            }
+
 
             if (owner != null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
@@ -418,14 +436,33 @@ public class ReservationService {
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendReservationConfirmationEmail(
                         recipientEmail,
+                        userRole,
                         updatedReservation.getId(),
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
-                        updatedReservation.getEndTime(), // Will be null for STANDARD/DIRECT pre-booked, non-null for END_USAGE/ended PAY_FOR_USAGE
-                        amountPaid
+                        updatedReservation.getEndTime(),
+                        amountPaid,
+                        guestAccessToken
                 );
             }
             return reservationMapper.toDTO(updatedReservation);
         }
     }
+
+    @Transactional(readOnly = true)
+    public ReservationDTO getReservationByIdForGuest(Long reservationId, String token) {
+        GuestAccessToken accessToken = guestAccessTokenRepository.findByTokenAndReservationId(token, reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired access token for this reservation."));
+
+        if (accessToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            guestAccessTokenRepository.delete(accessToken);
+            throw new InvalidDataException("Access token has expired.");
+        }
+        return reservationMapper.toDTO(accessToken.getReservation());
+    }
+
+    @Transactional
+    public void cleanupExpiredGuestAccessTokens() {
+        guestAccessTokenRepository.deleteByExpiresAtBefore(OffsetDateTime.now());
+       }
 }
