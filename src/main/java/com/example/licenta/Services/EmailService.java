@@ -15,6 +15,7 @@ import jakarta.mail.internet.MimeMessage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 @Service
@@ -121,12 +122,13 @@ public class EmailService {
     private String formatDateTimeForEmail(OffsetDateTime dateTime) {
         if (dateTime == null) return "N/A";
         try {
-            // Using a more common and universally understood pattern
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z");
-            return dateTime.format(formatter);
+            ZoneOffset gmtPlus3 = ZoneOffset.ofHours(3);
+            OffsetDateTime dateTimeInGmtPlus3 = dateTime.withOffsetSameInstant(gmtPlus3);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            return dateTimeInGmtPlus3.format(formatter);
         } catch (Exception e) {
-            logger.warn("Could not format OffsetDateTime with custom pattern for email: " + dateTime, e);
-            // Fallback to ISO standard, which is also clear
+            logger.warn("Could not format OffsetDateTime to 'yyyy-MM-dd HH:mm' in GMT+3 for email: " + dateTime + ". Error: " + e.getMessage(), e);
             return dateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         }
     }
@@ -182,7 +184,7 @@ public class EmailService {
                         "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + "</p>" +
                         "<p style='color: #555; line-height: 1.5;'>You will be charged based on the duration of your stay when you end the reservation.</p>" +
                         "<div style='text-align: center; margin: 30px 0;'>" +
-                        "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View/Manage Reservation</a>" +
+                        "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View Reservation</a>" +
                         "</div>" +
                         "<p style='color: #555; line-height: 1.5;'>You can view or manage your active reservation by clicking the button above or by copying this link into your browser: " +
                         "<span style='background-color: #e0e0e0; padding: 5px; border-radius: 3px; word-break: break-all;'>" + viewReservationLink + "</span></p>" +
@@ -198,7 +200,7 @@ public class EmailService {
 
     public boolean sendAccountCreationConfirmationEmail(String toEmail, String username) {
         String subject = "Welcome to " + appName + "!";
-        String loginLink = frontendUrl + "/login"; // Or your main page
+        String loginLink = frontendUrl + "/login";
 
         String htmlContent =
                 "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +

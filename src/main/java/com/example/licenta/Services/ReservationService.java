@@ -349,6 +349,7 @@ public class ReservationService {
 
         reservation.setEndTime(endTime);
         reservation.setTotalAmount(totalAmount);
+        reservation.setFinalAmount(totalAmount);
         reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
 
         Reservation updatedReservation = reservationRepository.save(reservation);
