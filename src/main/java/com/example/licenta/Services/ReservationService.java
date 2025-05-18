@@ -43,6 +43,7 @@ public class ReservationService {
     private final UserRepository userRepository;
     private final ReservationMapper reservationMapper;
     private final OpenAiChatModel openAiChatModel;
+    private final EmailService emailService;
     private static final Random random = new Random();
 
     @Autowired
@@ -50,13 +51,16 @@ public class ReservationService {
                               ParkingLotRepository parkingLotRepository,
                               UserRepository userRepository,
                               ReservationMapper reservationMapper,
-                              OpenAiChatModel openAiChatModel) {
+                              OpenAiChatModel openAiChatModel,
+                              EmailService emailService) {
         this.reservationRepository = reservationRepository;
         this.parkingLotRepository = parkingLotRepository;
         this.userRepository = userRepository;
         this.reservationMapper = reservationMapper;
         this.openAiChatModel = openAiChatModel;
+        this.emailService = emailService;
     }
+
 
     @Transactional
     public ReservationDTO createDirectReservation(CreateReservationDTO dto) {
@@ -348,6 +352,68 @@ public class ReservationService {
         reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
 
         Reservation updatedReservation = reservationRepository.save(reservation);
+        return reservationMapper.toDTO(updatedReservation);
+    }
+
+    @Transactional
+    public ReservationDTO handleSuccessfulPayment(Long reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
+
+        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not in PENDING_PAYMENT status. Current status: " + reservation.getStatus());
+        }
+
+        ParkingLot parkingLot = reservation.getParkingLot();
+        if (parkingLot == null) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
+        }
+
+        User owner = parkingLot.getOwner();
+
+        BigDecimal amountPaid = reservation.getFinalAmount();
+        if (amountPaid == null || amountPaid.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid paid amount.");
+        }
+
+        reservation.setStatus(ReservationStatus.PAID);
+
+        // The 'users' table has pending_earnings, total_earnings, paid_earnings.
+        // update pending_earnings (money owed to owner) and total_earnings.
+        if (owner != null) {
+            BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
+            BigDecimal currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(BigDecimal.ZERO);
+
+            owner.setPendingEarnings(currentPendingEarnings.add(amountPaid));
+            owner.setTotalEarnings(currentTotalEarnings.add(amountPaid));
+            userRepository.save(owner);
+        } else {
+            System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded for an owner.");
+        }
+
+        Reservation updatedReservation = reservationRepository.save(reservation);
+
+        String recipientEmail = null;
+
+        if (reservation.getUser() != null && reservation.getUser().getEmail() != null && !reservation.getUser().getEmail().isEmpty()) {
+            recipientEmail = reservation.getUser().getEmail();
+        } else if (reservation.getGuestEmail() != null && !reservation.getGuestEmail().isEmpty()) {
+            recipientEmail = reservation.getGuestEmail();
+        }
+
+        if (recipientEmail != null) {
+            emailService.sendReservationConfirmationEmail(
+                    recipientEmail,
+                    updatedReservation.getId(),
+                    parkingLot.getName(),
+                    updatedReservation.getStartTime(),
+                    updatedReservation.getEndTime(),
+                    amountPaid
+            );
+        } else {
+            System.err.println("No recipient email found for reservation ID " + updatedReservation.getId() + ". Confirmation email not sent.");
+        }
+
         return reservationMapper.toDTO(updatedReservation);
     }
 }

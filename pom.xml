@@ -138,6 +138,11 @@
 			<artifactId>spring-ai-openai</artifactId>
 			<version>1.0.0-M6</version>
 		</dependency>
+		<dependency>
+			<groupId>com.stripe</groupId>
+			<artifactId>stripe-java</artifactId>
+			<version>29.1.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>

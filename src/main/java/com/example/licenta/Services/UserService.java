@@ -87,7 +87,9 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
 
-        emailService.sendVerificationEmail(user.getEmail(), token);
+        emailService.sendVerificationEmail(savedUser.getEmail(), token);
+        emailService.sendAccountCreationConfirmationEmail(savedUser.getEmail(), savedUser.getUsername());
+
         return savedUser;
     }
 
@@ -182,20 +184,17 @@ public class UserService {
         }
 
         if (updateDto.getEmail() != null && !updateDto.getEmail().isEmpty()) {
-            if (!user.getEmail().equals(updateDto.getEmail()) &&
-                    userRepository.existsByEmail(updateDto.getEmail())) {
+            boolean emailChanged = !updateDto.getEmail().equalsIgnoreCase(user.getEmail());
+            if (emailChanged && userRepository.existsByEmail(updateDto.getEmail())) {
                 throw new UserExistsException("Email already in use");
             }
-
-            boolean emailChanged = !updateDto.getEmail().equals(user.getEmail());
             user.setEmail(updateDto.getEmail());
-
             if (emailChanged) {
                 user.setEmailVerified(false);
                 String token = generateToken();
                 user.setEmailVerificationToken(token);
                 user.setTokenExpiry(OffsetDateTime.now().plusDays(1));
-                emailService.sendVerificationEmail(updateDto.getEmail(), token);
+                emailService.sendVerificationEmail(user.getEmail(), token);
             }
         }
 
@@ -206,11 +205,12 @@ public class UserService {
                 String imageUrl = imageService.saveImage(updateDto.getProfileImage());
                 user.setProfileImage(imageUrl);
             } catch (IOException e) {
-                throw new InvalidDataException("Failed to save profile image: " + e.getMessage());
+                System.err.println("Failed to save profile image during update: " + e.getMessage());
             }
         }
 
-        if (updateDto.getCurrentPassword() != null && updateDto.getNewPassword() != null) {
+        if (updateDto.getCurrentPassword() != null && !updateDto.getCurrentPassword().isEmpty() &&
+                updateDto.getNewPassword() != null && !updateDto.getNewPassword().isEmpty()) {
             if (!passwordEncoder.matches(updateDto.getCurrentPassword(), user.getPassword())) {
                 throw new InvalidCredentialsException("Current password is incorrect");
             }
@@ -221,6 +221,7 @@ public class UserService {
             user.setRole(updateDto.getRole());
         }
 
+        user.setUpdatedAt(OffsetDateTime.now());
         return userRepository.save(user);
     }
 
@@ -266,13 +267,14 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
-        if (vehiclePlateRepository.existsByUserIdAndPlateNumber(userId, plateDto.getPlateNumber())) {
-            throw new InvalidDataException("This vehicle plate is already registered");
+        String normalizedPlateNumber = plateDto.getPlateNumber().toUpperCase().replaceAll("\\s+", "");
+        if (vehiclePlateRepository.existsByUserIdAndPlateNumber(userId, normalizedPlateNumber)) {
+            throw new InvalidDataException("This vehicle plate is already registered for this user.");
         }
 
         UserVehiclePlate plate = new UserVehiclePlate();
         plate.setUser(user);
-        plate.setPlateNumber(plateDto.getPlateNumber());
+        plate.setPlateNumber(normalizedPlateNumber);
 
         return vehiclePlateRepository.save(plate);
     }
@@ -291,7 +293,6 @@ public class UserService {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId);
         }
-
         return vehiclePlateRepository.findByUserId(userId);
     }
 
@@ -299,6 +300,12 @@ public class UserService {
     public UserPaymentMethod addPaymentMethod(Long userId, UserPaymentMethodDTO methodDto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+
+        int currentYear = OffsetDateTime.now().getYear();
+        if (methodDto.getExpiryYear() < currentYear ||
+                (methodDto.getExpiryYear() == currentYear && methodDto.getExpiryMonth() < OffsetDateTime.now().getMonthValue())) {
+            throw new InvalidDataException("Payment card has expired.");
+        }
 
         UserPaymentMethod method = new UserPaymentMethod();
         method.setUser(user);
@@ -323,15 +330,15 @@ public class UserService {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId);
         }
-
         return paymentMethodRepository.findByUserId(userId);
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> findById(Long id) {
         return userRepository.findById(id);
     }
 
-    public String generateToken() {
+    private String generateToken() {
         return UUID.randomUUID().toString();
     }
 }

@@ -12,6 +12,11 @@ import org.springframework.stereotype.Service;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+
 @Service
 public class EmailService {
 
@@ -111,6 +116,77 @@ public class EmailService {
                         "</div>";
 
         return sendHtmlEmail(to, subject, htmlContent);
+    }
+
+    private String formatDateTimeForEmail(OffsetDateTime dateTime) {
+        if (dateTime == null) return "N/A";
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm (OOOO)");
+            return dateTime.format(formatter);
+        } catch (Exception e) {
+            logger.warn("Could not format OffsetDateTime with custom pattern for email: " + dateTime, e);
+            return dateTime.toString();
+        }
+    }
+
+    public boolean sendReservationConfirmationEmail(String toEmail, Long reservationId, String parkingLotName,
+                                                    OffsetDateTime startTime, OffsetDateTime endTime,
+                                                    BigDecimal amountPaid) {
+        String subject = "Your Reservation is Confirmed!";
+        String viewReservationLink = frontendUrl + "/reservation/" + reservationId;
+
+        String htmlContent =
+                "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
+                        "<div style='text-align: center; margin-bottom: 20px;'>" +
+                        "<h1 style='color: #4a6cf7;'>" + appName + "</h1>" +
+                        "</div>" +
+                        "<div style='background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>" +
+                        "<h2 style='margin-top: 0; color: #333;'>Reservation Confirmed!</h2>" +
+                        "<p style='color: #555; line-height: 1.5;'>Thank you for your payment. Your parking reservation is confirmed.</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Parking Lot:</strong> " + parkingLotName + "</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + "</p>" +
+                        (endTime != null ? "<p style='color: #555; line-height: 1.5;'><strong>End Time:</strong> " + formatDateTimeForEmail(endTime) + "</p>" : "") +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + amountPaid.setScale(2, RoundingMode.HALF_UP).toString() + " RON</p>" +
+                        "<div style='text-align: center; margin: 30px 0;'>" +
+                        "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View Reservation</a>" +
+                        "</div>" +
+                        "<p style='color: #555; line-height: 1.5;'>You can view your reservation details by clicking the button above. " +
+                        "Access to this link for viewing details is generally available while the reservation is ongoing and for a short period after it ends, as per site policy.</p>" +
+                        "</div>" +
+                        "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 20px;'>" +
+                        "<p>If you have any questions, please contact our support.</p>" +
+                        "<p>&copy; " + java.time.Year.now().getValue() + " " + appName + ". All rights reserved.</p>" +
+                        "</div>" +
+                        "</div>";
+
+        return sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    public boolean sendAccountCreationConfirmationEmail(String toEmail, String username) {
+        String subject = "Welcome to " + appName + "!";
+        String loginLink = frontendUrl + "/login";
+
+        String htmlContent =
+                "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
+                        "<div style='text-align: center; margin-bottom: 20px;'>" +
+                        "<h1 style='color: #4a6cf7;'>" + appName + "</h1>" +
+                        "</div>" +
+                        "<div style='background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>" +
+                        "<h2 style='margin-top: 0; color: #333;'>Welcome, " + username + "!</h2>" +
+                        "<p style='color: #555; line-height: 1.5;'>Thank you for creating an account with " + appName + ". We're excited to have you on board.</p>" +
+                        "<p style='color: #555; line-height: 1.5;'>Your account is now active. You may still need to verify your email address if you haven't already done so (please check for a separate verification email).</p>" +
+                        "<div style='text-align: center; margin: 30px 0;'>" +
+                        "<a href='" + loginLink + "' style='background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>Explore " + appName + "</a>" +
+                        "</div>" +
+                        "<p style='color: #555; line-height: 1.5;'>If you have any questions or need assistance, feel free to contact our support team.</p>" +
+                        "</div>" +
+                        "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 20px;'>" +
+                        "<p>This is an automated message. Please do not reply directly to this email.</p>" +
+                        "<p>&copy; " + java.time.Year.now().getValue() + " " + appName + ". All rights reserved.</p>" +
+                        "</div>" +
+                        "</div>";
+
+        return sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
     private boolean sendHtmlEmail(String to, String subject, String htmlContent) {

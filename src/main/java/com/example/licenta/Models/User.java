@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +71,15 @@ public class User {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @Column(name = "pending_earnings", precision = 10, scale = 2)
+    private BigDecimal pendingEarnings = BigDecimal.ZERO;
+
+    @Column(name = "total_earnings", precision = 10, scale = 2)
+    private BigDecimal totalEarnings = BigDecimal.ZERO;
+
+    @Column(name = "paid_earnings", precision = 10, scale = 2)
+    private BigDecimal paidEarnings = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ParkingLot> parkingLots = new ArrayList<>();
 
@@ -82,19 +92,5 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
-    }
-
-    public void addParkingLot(ParkingLot parkingLot) {
-        if (parkingLot != null) {
-            parkingLots.add(parkingLot);
-            parkingLot.setOwner(this);
-        }
-    }
-
-    public void removeParkingLot(ParkingLot parkingLot) {
-        if (parkingLot != null && parkingLots.contains(parkingLot)) {
-            parkingLots.remove(parkingLot);
-            parkingLot.setOwner(null);
-        }
     }
 }

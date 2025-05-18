@@ -190,4 +190,15 @@ public class ReservationController {
         );
         return ResponseEntity.ok(response);
     }
+    @PostMapping("/{id}/payment-success")
+    public ResponseEntity<ApiResponse<ReservationDTO>> handleSuccessfulPayment(@PathVariable Long id) {
+        ReservationDTO updatedReservation = reservationService.handleSuccessfulPayment(id);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Payment processed successfully and reservation updated.",
+                updatedReservation
+        );
+        return ResponseEntity.ok(response);
+    }
 }
