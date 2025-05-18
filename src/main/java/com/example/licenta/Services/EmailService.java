@@ -121,18 +121,20 @@ public class EmailService {
     private String formatDateTimeForEmail(OffsetDateTime dateTime) {
         if (dateTime == null) return "N/A";
         try {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm (OOOO)");
+            // Using a more common and universally understood pattern
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z");
             return dateTime.format(formatter);
         } catch (Exception e) {
             logger.warn("Could not format OffsetDateTime with custom pattern for email: " + dateTime, e);
-            return dateTime.toString();
+            // Fallback to ISO standard, which is also clear
+            return dateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         }
     }
 
     public boolean sendReservationConfirmationEmail(String toEmail, Long reservationId, String parkingLotName,
                                                     OffsetDateTime startTime, OffsetDateTime endTime,
                                                     BigDecimal amountPaid) {
-        String subject = "Your Reservation is Confirmed!";
+        String subject = appName + ": Reservation Confirmed & Paid";
         String viewReservationLink = frontendUrl + "/reservation/" + reservationId;
 
         String htmlContent =
@@ -143,15 +145,16 @@ public class EmailService {
                         "<div style='background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>" +
                         "<h2 style='margin-top: 0; color: #333;'>Reservation Confirmed!</h2>" +
                         "<p style='color: #555; line-height: 1.5;'>Thank you for your payment. Your parking reservation is confirmed.</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Reservation ID:</strong> " + reservationId + "</p>" +
                         "<p style='color: #555; line-height: 1.5;'><strong>Parking Lot:</strong> " + parkingLotName + "</p>" +
                         "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + "</p>" +
                         (endTime != null ? "<p style='color: #555; line-height: 1.5;'><strong>End Time:</strong> " + formatDateTimeForEmail(endTime) + "</p>" : "") +
-                        "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + amountPaid.setScale(2, RoundingMode.HALF_UP).toString() + " RON</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + (amountPaid != null ? amountPaid.setScale(2, RoundingMode.HALF_UP).toString() : "0.00") + " RON</p>" +
                         "<div style='text-align: center; margin: 30px 0;'>" +
                         "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View Reservation</a>" +
                         "</div>" +
-                        "<p style='color: #555; line-height: 1.5;'>You can view your reservation details by clicking the button above. " +
-                        "Access to this link for viewing details is generally available while the reservation is ongoing and for a short period after it ends, as per site policy.</p>" +
+                        "<p style='color: #555; line-height: 1.5;'>You can view your reservation details by clicking the button above or by copying this link into your browser: " +
+                        "<span style='background-color: #e0e0e0; padding: 5px; border-radius: 3px; word-break: break-all;'>" + viewReservationLink + "</span></p>" +
                         "</div>" +
                         "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 20px;'>" +
                         "<p>If you have any questions, please contact our support.</p>" +
@@ -162,9 +165,40 @@ public class EmailService {
         return sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
+    public boolean sendPayForUsageActiveEmail(String toEmail, Long reservationId, String parkingLotName, OffsetDateTime startTime) {
+        String subject = appName + ": Your On-Demand Parking is Active!";
+        String viewReservationLink = frontendUrl + "/reservation/" + reservationId;
+
+        String htmlContent =
+                "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
+                        "<div style='text-align: center; margin-bottom: 20px;'>" +
+                        "<h1 style='color: #4a6cf7;'>" + appName + "</h1>" +
+                        "</div>" +
+                        "<div style='background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>" +
+                        "<h2 style='margin-top: 0; color: #333;'>Your On-Demand Parking is Active!</h2>" +
+                        "<p style='color: #555; line-height: 1.5;'>Your card has been successfully verified, and your pay-for-usage parking session is now active.</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Reservation ID:</strong> " + reservationId + "</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Parking Lot:</strong> " + parkingLotName + "</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + "</p>" +
+                        "<p style='color: #555; line-height: 1.5;'>You will be charged based on the duration of your stay when you end the reservation.</p>" +
+                        "<div style='text-align: center; margin: 30px 0;'>" +
+                        "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View/Manage Reservation</a>" +
+                        "</div>" +
+                        "<p style='color: #555; line-height: 1.5;'>You can view or manage your active reservation by clicking the button above or by copying this link into your browser: " +
+                        "<span style='background-color: #e0e0e0; padding: 5px; border-radius: 3px; word-break: break-all;'>" + viewReservationLink + "</span></p>" +
+                        "</div>" +
+                        "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 20px;'>" +
+                        "<p>If you have any questions, please contact our support.</p>" +
+                        "<p>&copy; " + java.time.Year.now().getValue() + " " + appName + ". All rights reserved.</p>" +
+                        "</div>" +
+                        "</div>";
+        return sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+
     public boolean sendAccountCreationConfirmationEmail(String toEmail, String username) {
         String subject = "Welcome to " + appName + "!";
-        String loginLink = frontendUrl + "/login";
+        String loginLink = frontendUrl + "/login"; // Or your main page
 
         String htmlContent =
                 "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
@@ -203,7 +237,7 @@ public class EmailService {
             logger.info("{} email sent to: {}", subject, to);
             return true;
         } catch (MailException | MessagingException e) {
-            logger.error("Failed to send {} email to: {}. Error: {}", subject, to, e.getMessage());
+            logger.error("Failed to send {} email to: {}. Error: {}", subject, to, e.getMessage(), e); // Added exception to log
             return false;
         }
     }

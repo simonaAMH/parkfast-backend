@@ -360,60 +360,71 @@ public class ReservationService {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
-        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not in PENDING_PAYMENT status. Current status: " + reservation.getStatus());
-        }
-
         ParkingLot parkingLot = reservation.getParkingLot();
         if (parkingLot == null) {
             throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
         }
 
-        User owner = parkingLot.getOwner();
-
-        BigDecimal amountPaid = reservation.getFinalAmount();
-        if (amountPaid == null || amountPaid.compareTo(BigDecimal.ZERO) < 0) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid paid amount.");
+        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not in PENDING_PAYMENT status. Current status: " + reservation.getStatus());
         }
 
-        reservation.setStatus(ReservationStatus.PAID);
+        String recipientEmail = reservation.getUser() != null && reservation.getUser().getEmail() != null ?
+                reservation.getUser().getEmail() : reservation.getGuestEmail();
 
-        // The 'users' table has pending_earnings, total_earnings, paid_earnings.
-        // update pending_earnings (money owed to owner) and total_earnings.
-        if (owner != null) {
-            BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
-            BigDecimal currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(BigDecimal.ZERO);
+        // Case 1: Initial activation of PAY_FOR_USAGE (card verification)
+        if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+            reservation.setStatus(ReservationStatus.ACTIVE);
+            // finalAmount here is typically 0 or reflects points used for activation incentives, not actual usage cost.
+            // No earnings update at this stage for PAY_FOR_USAGE activation.
+            Reservation updatedReservation = reservationRepository.save(reservation);
+            if (recipientEmail != null && !recipientEmail.isEmpty()) {
+                emailService.sendPayForUsageActiveEmail(
+                        recipientEmail,
+                        updatedReservation.getId(),
+                        parkingLot.getName(),
+                        updatedReservation.getStartTime()
+                );
+            }
+            return reservationMapper.toDTO(updatedReservation);
 
-            owner.setPendingEarnings(currentPendingEarnings.add(amountPaid));
-            owner.setTotalEarnings(currentTotalEarnings.add(amountPaid));
-            userRepository.save(owner);
-        } else {
-            System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded for an owner.");
+        } else { // Case 2: Actual payment for STANDARD, DIRECT, or an ENDED PAY_FOR_USAGE, or a free STANDARD
+            User owner = parkingLot.getOwner();
+            BigDecimal amountPaid = reservation.getFinalAmount();
+
+            // For free STANDARD or points-covered, amountPaid can be 0.
+            // For paid reservations, it must be >= 0.
+            if (amountPaid == null) {
+                throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a final amount for payment processing.");
+            }
+            if (amountPaid.compareTo(BigDecimal.ZERO) < 0) {
+                throw new InvalidDataException("Reservation (ID: " + reservationId + ") final amount cannot be negative.");
+            }
+
+            reservation.setStatus(ReservationStatus.PAID);
+
+            if (owner != null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
+                BigDecimal currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(BigDecimal.ZERO);
+                owner.setPendingEarnings(currentPendingEarnings.add(amountPaid));
+                owner.setTotalEarnings(currentTotalEarnings.add(amountPaid));
+                userRepository.save(owner);
+            } else if (owner == null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
+                System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded.");
+            }
+
+            Reservation updatedReservation = reservationRepository.save(reservation);
+            if (recipientEmail != null && !recipientEmail.isEmpty()) {
+                emailService.sendReservationConfirmationEmail(
+                        recipientEmail,
+                        updatedReservation.getId(),
+                        parkingLot.getName(),
+                        updatedReservation.getStartTime(),
+                        updatedReservation.getEndTime(), // Will be null for STANDARD/DIRECT pre-booked, non-null for END_USAGE/ended PAY_FOR_USAGE
+                        amountPaid
+                );
+            }
+            return reservationMapper.toDTO(updatedReservation);
         }
-
-        Reservation updatedReservation = reservationRepository.save(reservation);
-
-        String recipientEmail = null;
-
-        if (reservation.getUser() != null && reservation.getUser().getEmail() != null && !reservation.getUser().getEmail().isEmpty()) {
-            recipientEmail = reservation.getUser().getEmail();
-        } else if (reservation.getGuestEmail() != null && !reservation.getGuestEmail().isEmpty()) {
-            recipientEmail = reservation.getGuestEmail();
-        }
-
-        if (recipientEmail != null) {
-            emailService.sendReservationConfirmationEmail(
-                    recipientEmail,
-                    updatedReservation.getId(),
-                    parkingLot.getName(),
-                    updatedReservation.getStartTime(),
-                    updatedReservation.getEndTime(),
-                    amountPaid
-            );
-        } else {
-            System.err.println("No recipient email found for reservation ID " + updatedReservation.getId() + ". Confirmation email not sent.");
-        }
-
-        return reservationMapper.toDTO(updatedReservation);
     }
 }
