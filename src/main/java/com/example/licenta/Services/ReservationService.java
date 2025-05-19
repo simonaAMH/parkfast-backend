@@ -378,12 +378,20 @@ public class ReservationService {
         }
 
         User user = reservation.getUser();
-        String userRole = (user != null && user.getRole() != null) ? user.getRole().name() : null;
 
         String recipientEmail = (user != null && user.getEmail() != null) ?
                 user.getEmail() : reservation.getGuestEmail();
 
         String guestAccessToken = null;
+        if (user == null) {
+            guestAccessToken = UUID.randomUUID().toString();
+            GuestAccessToken tokenEntity = GuestAccessToken.builder()
+                    .token(guestAccessToken)
+                    .reservation(reservation)
+                    .expiresAt(reservation.getEndTime().plus(1, ChronoUnit.HOURS))
+                    .build();
+            guestAccessTokenRepository.save(tokenEntity);
+        }
 
         // (card verification)
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
@@ -394,7 +402,8 @@ public class ReservationService {
                         recipientEmail,
                         updatedReservation.getId(),
                         parkingLot.getName(),
-                        updatedReservation.getStartTime()
+                        updatedReservation.getStartTime(),
+                        guestAccessToken
                 );
             }
             return reservationMapper.toDTO(updatedReservation);
@@ -411,17 +420,6 @@ public class ReservationService {
 
             reservation.setStatus(ReservationStatus.PAID);
 
-            if (user == null && reservation.getEndTime() != null) {
-                guestAccessToken = UUID.randomUUID().toString();
-                GuestAccessToken tokenEntity = GuestAccessToken.builder()
-                        .token(guestAccessToken)
-                        .reservation(reservation)
-                        .expiresAt(reservation.getEndTime().plus(1, ChronoUnit.HOURS))
-                        .build();
-                guestAccessTokenRepository.save(tokenEntity);
-            }
-
-
             if (owner != null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
                 BigDecimal currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(BigDecimal.ZERO);
@@ -436,7 +434,6 @@ public class ReservationService {
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendReservationConfirmationEmail(
                         recipientEmail,
-                        userRole,
                         updatedReservation.getId(),
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),

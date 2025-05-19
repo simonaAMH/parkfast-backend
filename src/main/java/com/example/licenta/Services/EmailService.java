@@ -134,7 +134,7 @@ public class EmailService {
         }
     }
 
-    public boolean sendReservationConfirmationEmail(String toEmail, String userRole, Long reservationId, String parkingLotName,
+    public boolean sendReservationConfirmationEmail(String toEmail, Long reservationId, String parkingLotName,
                                                     OffsetDateTime startTime, OffsetDateTime endTime,
                                                     BigDecimal amountPaid, @Nullable String guestAccessToken) {
         String subject = appName + ": Reservation Confirmed & Paid";
@@ -174,9 +174,15 @@ public class EmailService {
         return sendHtmlEmail(toEmail, subject, htmlContent);
     }
 
-    public boolean sendPayForUsageActiveEmail(String toEmail, Long reservationId, String parkingLotName, OffsetDateTime startTime) {
+    public boolean sendPayForUsageActiveEmail(String toEmail, Long reservationId, String parkingLotName, OffsetDateTime startTime,
+                                              @Nullable String guestAccessToken) {
         String subject = appName + ": Your On-Demand Parking is Active!";
-        String viewReservationLink = frontendUrl + "/reservation/" + reservationId;
+        String baseLink = frontendUrl + "/reservation/" + reservationId;
+
+        String viewReservationLink = baseLink;
+        if (guestAccessToken != null && !guestAccessToken.isEmpty()) {
+            viewReservationLink += "?access_token=" + guestAccessToken;
+        }
 
         String htmlContent =
                 "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
