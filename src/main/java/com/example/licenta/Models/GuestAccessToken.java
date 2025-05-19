@@ -27,7 +27,7 @@ public class GuestAccessToken {
     @JoinColumn(name = "reservation_id", nullable = false)
     private Reservation reservation;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private OffsetDateTime expiresAt;
 
     @Column(nullable = false, updatable = false)

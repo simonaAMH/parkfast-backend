@@ -378,25 +378,25 @@ public class ReservationService {
         }
 
         User user = reservation.getUser();
-
         String recipientEmail = (user != null && user.getEmail() != null) ?
                 user.getEmail() : reservation.getGuestEmail();
-
         String guestAccessToken = null;
-        if (user == null) {
-            guestAccessToken = UUID.randomUUID().toString();
-            GuestAccessToken tokenEntity = GuestAccessToken.builder()
-                    .token(guestAccessToken)
-                    .reservation(reservation)
-                    .expiresAt(reservation.getEndTime().plus(1, ChronoUnit.HOURS))
-                    .build();
-            guestAccessTokenRepository.save(tokenEntity);
-        }
 
-        // (card verification)
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             reservation.setStatus(ReservationStatus.ACTIVE);
+
+            if (user == null) {
+                guestAccessToken = UUID.randomUUID().toString();
+                GuestAccessToken tokenEntity = GuestAccessToken.builder()
+                        .token(guestAccessToken)
+                        .reservation(reservation)
+                        .expiresAt(null)
+                        .build();
+                guestAccessTokenRepository.save(tokenEntity);
+            }
+
             Reservation updatedReservation = reservationRepository.save(reservation);
+
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendPayForUsageActiveEmail(
                         recipientEmail,
@@ -408,6 +408,21 @@ public class ReservationService {
             }
             return reservationMapper.toDTO(updatedReservation);
         } else {
+            if (reservation.getEndTime() == null) {
+                throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
+                        reservation.getReservationType() + " must have an end time at this stage of payment processing.");
+            }
+
+            if (user == null) { // It's a guest paying for a reservation that has an endTime
+                guestAccessToken = UUID.randomUUID().toString();
+                GuestAccessToken tokenEntity = GuestAccessToken.builder()
+                        .token(guestAccessToken)
+                        .reservation(reservation)
+                        .expiresAt(reservation.getEndTime().plusHours(1))
+                        .build();
+                guestAccessTokenRepository.save(tokenEntity);
+            }
+
             User owner = parkingLot.getOwner();
             BigDecimal amountPaid = reservation.getFinalAmount();
 
@@ -431,6 +446,7 @@ public class ReservationService {
             }
 
             Reservation updatedReservation = reservationRepository.save(reservation);
+
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendReservationConfirmationEmail(
                         recipientEmail,
@@ -451,7 +467,7 @@ public class ReservationService {
         GuestAccessToken accessToken = guestAccessTokenRepository.findByTokenAndReservationId(token, reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired access token for this reservation."));
 
-        if (accessToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
+        if (accessToken.getExpiresAt() != null && accessToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
             guestAccessTokenRepository.delete(accessToken);
             throw new InvalidDataException("Access token has expired.");
         }
