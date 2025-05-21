@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface GuestAccessTokenRepository extends JpaRepository<GuestAccessToken, String> {
     Optional<GuestAccessToken> findByTokenAndReservationId(String token, String reservationId);
+    Optional<GuestAccessToken> findByReservationId(String reservationId);
     Optional<GuestAccessToken> findByToken(String token);
     void deleteByExpiresAtBefore(OffsetDateTime now);
 }

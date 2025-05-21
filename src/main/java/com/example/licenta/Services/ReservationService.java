@@ -363,13 +363,34 @@ public class ReservationService {
     }
 
     @Transactional
+    protected GuestAccessToken generateOrUpdateGuestToken(Reservation reservation, OffsetDateTime expiresAt) {
+        Optional<GuestAccessToken> existingTokenOpt = guestAccessTokenRepository.findByReservationId(reservation.getId());
+
+        if (existingTokenOpt.isPresent()) {
+            GuestAccessToken existingToken = existingTokenOpt.get();
+            System.out.println("GuestAccessToken already exists for reservation " + reservation.getId() + ". Updating token and expiry.");
+            existingToken.setToken(UUID.randomUUID().toString());
+            existingToken.setExpiresAt(expiresAt);
+            return guestAccessTokenRepository.save(existingToken);
+        } else {
+            System.out.println("No GuestAccessToken found for reservation " + reservation.getId() + ". Creating a new one.");
+            GuestAccessToken newToken = GuestAccessToken.builder()
+                    .token(UUID.randomUUID().toString())
+                    .reservation(reservation)
+                    .expiresAt(expiresAt)
+                    .build();
+            return guestAccessTokenRepository.save(newToken);
+        }
+    }
+
+    @Transactional
     public ReservationDTO handleSuccessfulPayment(String reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
         ParkingLot parkingLot = reservation.getParkingLot();
         if (parkingLot == null) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
+            throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
         }
 
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
@@ -379,19 +400,14 @@ public class ReservationService {
         User user = reservation.getUser();
         String recipientEmail = (user != null && user.getEmail() != null) ?
                 user.getEmail() : reservation.getGuestEmail();
-        String guestAccessToken = null;
+        String guestAccessTokenString = null;
 
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             reservation.setStatus(ReservationStatus.ACTIVE);
 
             if (user == null) {
-                guestAccessToken = UUID.randomUUID().toString();
-                GuestAccessToken tokenEntity = GuestAccessToken.builder()
-                        .token(guestAccessToken)
-                        .reservation(reservation)
-                        .expiresAt(null)
-                        .build();
-                guestAccessTokenRepository.save(tokenEntity);
+                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null);
+                guestAccessTokenString = guestToken.getToken();
             }
 
             Reservation updatedReservation = reservationRepository.save(reservation);
@@ -402,24 +418,27 @@ public class ReservationService {
                         updatedReservation.getId(),
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
-                        guestAccessToken
+                        guestAccessTokenString
                 );
             }
             return reservationMapper.toDTO(updatedReservation);
+
         } else {
-            if (reservation.getEndTime() == null) {
+            if (reservation.getEndTime() == null && reservation.getReservationType() != ReservationType.PAY_FOR_USAGE) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
-                        reservation.getReservationType() + " must have an end time at this stage of payment processing.");
+                        reservation.getReservationType() + " must have an end time for final payment processing.");
             }
 
-            if (user == null) { // It's a guest paying for a reservation that has an endTime
-                guestAccessToken = UUID.randomUUID().toString();
-                GuestAccessToken tokenEntity = GuestAccessToken.builder()
-                        .token(guestAccessToken)
-                        .reservation(reservation)
-                        .expiresAt(reservation.getEndTime().plusHours(1))
-                        .build();
-                guestAccessTokenRepository.save(tokenEntity);
+            if (user == null) {
+                OffsetDateTime tokenExpiry = null;
+                if (reservation.getEndTime() != null) {
+                    tokenExpiry = reservation.getEndTime().plusHours(1);
+                } else {
+                    tokenExpiry = OffsetDateTime.now().plusHours(1);
+                    System.err.println("Guest reservation " + reservationId + " of type " + reservation.getReservationType() + " has no endTime for token generation. Setting default expiry.");
+                }
+                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, tokenExpiry);
+                guestAccessTokenString = guestToken.getToken();
             }
 
             User owner = parkingLot.getOwner();
@@ -454,7 +473,7 @@ public class ReservationService {
                         updatedReservation.getStartTime(),
                         updatedReservation.getEndTime(),
                         amountPaid,
-                        guestAccessToken
+                        guestAccessTokenString
                 );
             }
             return reservationMapper.toDTO(updatedReservation);
