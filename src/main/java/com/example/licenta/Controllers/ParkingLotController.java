@@ -3,12 +3,14 @@ package com.example.licenta.Controllers;
 import com.example.licenta.DTOs.ApiResponse;
 import com.example.licenta.DTOs.ClosestParkingLotInfoDTO;
 import com.example.licenta.DTOs.ParkingLotDTO;
+import com.example.licenta.DTOs.ReviewDTO;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Exceptions.InvalidDataException;
 import com.example.licenta.Mappers.ParkingLotMapper;
 import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.User;
 import com.example.licenta.Services.ParkingLotService;
+import com.example.licenta.Services.ReservationService;
 import com.example.licenta.Services.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class ParkingLotController {
 
     private final ParkingLotService parkingLotService;
+    private final ReservationService reservationService;
     private final UserService userService;
     private final ParkingLotMapper parkingLotMapper;
 
@@ -38,8 +41,10 @@ public class ParkingLotController {
     public ParkingLotController(
             ParkingLotService parkingLotService,
             UserService userService,
+            ReservationService reservationService,
             ParkingLotMapper parkingLotMapper) {
         this.parkingLotService = parkingLotService;
+        this.reservationService = reservationService;
         this.userService = userService;
         this.parkingLotMapper = parkingLotMapper;
     }
@@ -321,5 +326,31 @@ public class ParkingLotController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/{parkingLotId}/reviews")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getReviewsForParkingLot(
+            @PathVariable Long parkingLotId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDir) {
 
+        Sort.Direction direction = Sort.Direction.fromString(sortDir.toUpperCase());
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+
+        Page<ReviewDTO> reviewPage = reservationService.getReviewsByParkingLotId(parkingLotId, pageable);
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("reviews", reviewPage.getContent());
+        responseData.put("currentPage", reviewPage.getNumber());
+        responseData.put("totalItems", reviewPage.getTotalElements());
+        responseData.put("totalPages", reviewPage.getTotalPages());
+
+        ApiResponse<Map<String, Object>> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Parking lot reviews retrieved successfully",
+                responseData
+        );
+        return ResponseEntity.ok(response);
+    }
 }

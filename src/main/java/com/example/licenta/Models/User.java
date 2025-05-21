@@ -83,6 +83,9 @@ public class User {
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ParkingLot> parkingLots = new ArrayList<>();
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<Review> reviews = new ArrayList<>();
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();

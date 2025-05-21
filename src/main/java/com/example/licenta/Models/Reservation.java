@@ -72,8 +72,11 @@ public class Reservation {
     @Column(name = "status", nullable = false)
     private ReservationStatus status = ReservationStatus.PENDING_PAYMENT;
 
-    @Column(name = "qr_code_data", length = 500) // If QR codes are used
+    @Column(name = "qr_code_data", length = 500)
     private String qrCodeData;
+
+    @OneToOne(mappedBy = "reservation", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private Review review;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

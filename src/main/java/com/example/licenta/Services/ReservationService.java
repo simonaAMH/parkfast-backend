@@ -1,21 +1,21 @@
 package com.example.licenta.Services;
 
 import com.example.licenta.DTOs.CreateReservationDTO;
+import com.example.licenta.DTOs.CreateReviewDTO;
 import com.example.licenta.DTOs.ReservationDTO;
+import com.example.licenta.DTOs.ReviewDTO;
 import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.Exceptions.AuthenticationException;
 import com.example.licenta.Exceptions.InvalidDataException;
+import com.example.licenta.Exceptions.ResourceAlreadyExistsException;
 import com.example.licenta.Exceptions.ResourceNotFoundException;
 import com.example.licenta.Mappers.ReservationMapper;
-import com.example.licenta.Models.GuestAccessToken;
-import com.example.licenta.Models.ParkingLot;
-import com.example.licenta.Models.Reservation;
-import com.example.licenta.Models.User;
-import com.example.licenta.Repositories.GuestAccessTokenRepository;
-import com.example.licenta.Repositories.ParkingLotRepository;
-import com.example.licenta.Repositories.ReservationRepository;
-import com.example.licenta.Repositories.UserRepository;
+import com.example.licenta.Models.*;
+import com.example.licenta.Repositories.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -31,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,6 +49,7 @@ public class ReservationService {
     private final EmailService emailService;
     private static final Random random = new Random();
     private final GuestAccessTokenRepository guestAccessTokenRepository;
+    private final ReviewRepository reviewRepository;
 
     @Autowired
     public ReservationService(ReservationRepository reservationRepository,
@@ -58,6 +58,7 @@ public class ReservationService {
                               ReservationMapper reservationMapper,
                               OpenAiChatModel openAiChatModel,
                               EmailService emailService,
+                              ReviewRepository reviewRepository,
                               GuestAccessTokenRepository guestAccessTokenRepository) {
         this.reservationRepository = reservationRepository;
         this.parkingLotRepository = parkingLotRepository;
@@ -65,6 +66,7 @@ public class ReservationService {
         this.reservationMapper = reservationMapper;
         this.openAiChatModel = openAiChatModel;
         this.emailService = emailService;
+        this.reviewRepository = reviewRepository;
         this.guestAccessTokenRepository = guestAccessTokenRepository;
     }
 
@@ -89,7 +91,7 @@ public class ReservationService {
         try {
             startTime = OffsetDateTime.parse(dto.getStartTime());
 
-            if(dto.getEndTime() != null ){
+            if (dto.getEndTime() != null) {
                 endTime = OffsetDateTime.parse(dto.getEndTime());
             }
 
@@ -477,5 +479,132 @@ public class ReservationService {
     @Transactional
     public void cleanupExpiredGuestAccessTokens() {
         guestAccessTokenRepository.deleteByExpiresAtBefore(OffsetDateTime.now());
-       }
+    }
+
+    @Transactional
+    public ReviewDTO createReview(Long reservationId, CreateReviewDTO reviewDto) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
+
+        if (reviewRepository.existsByReservationId(reservationId)) {
+            throw new ResourceAlreadyExistsException("A review already exists for this reservation.");
+        }
+
+        if (reservation.getStatus() != ReservationStatus.PAID) {
+            throw new InvalidDataException("Reviews can only be added for paid or completed reservations. Current status: " + reservation.getStatus());
+        }
+
+        User reservationUser = reservation.getUser();
+        String finalReviewerDisplayName;
+
+        if (reservationUser != null) {
+            finalReviewerDisplayName = reservationUser.getUsername();
+        } else {
+            if (reservation.getGuestName() != null && !reservation.getGuestName().isEmpty()) {
+                finalReviewerDisplayName = reservation.getGuestName();
+            } else {
+                finalReviewerDisplayName = "Guest";
+            }
+        }
+
+        Review review = new Review();
+        review.setRating(reviewDto.getRating());
+        review.setComment(reviewDto.getComment());
+        review.setReservation(reservation);
+        review.setUser(reservationUser);
+        review.setReviewerDisplayName(finalReviewerDisplayName);
+
+        Review savedReview = reviewRepository.save(review);
+
+        ParkingLot parkingLot = reservation.getParkingLot();
+        if (parkingLot == null) {
+            throw new ResourceNotFoundException("Trying to add a review for a reservation associated with a parking lot that doesn't exist." + reservationId);
+        } else {
+            recalculateAndSaveParkingLotAverageRating(parkingLot);
+        }
+
+        return ReviewDTO.builder()
+                .id(savedReview.getId())
+                .rating(savedReview.getRating())
+                .comment(savedReview.getComment())
+                .reservationId(savedReview.getReservation().getId())
+                .userId(savedReview.getUser() != null ? savedReview.getUser().getId() : null)
+                .reviewerDisplayName(savedReview.getReviewerDisplayName())
+                .createdAt(savedReview.getCreatedAt())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public ReviewDTO getReviewByReservationId(Long reservationId) {
+        Review review = reviewRepository.findByReservationId(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
+
+        return ReviewDTO.builder()
+                .id(review.getId())
+                .rating(review.getRating())
+                .comment(review.getComment())
+                .reservationId(review.getReservation().getId())
+                .userId(review.getUser() != null ? review.getUser().getId() : null)
+                .reviewerDisplayName(review.getReviewerDisplayName())
+                .createdAt(review.getCreatedAt())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReviewDTO> getReviewsByParkingLotId(Long parkingLotId, Pageable pageable) {
+        parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found with ID: " + parkingLotId));
+
+        Page<Review> reviewsPage = reviewRepository.findReviewsByParkingLotId(parkingLotId, pageable);
+
+        List<ReviewDTO> reviewDTOs = reviewsPage.getContent().stream()
+                .map(review -> ReviewDTO.builder()
+                        .id(review.getId())
+                        .rating(review.getRating())
+                        .comment(review.getComment())
+                        .reservationId(review.getReservation().getId())
+                        .userId(review.getUser() != null ? review.getUser().getId() : null)
+                        .reviewerDisplayName(review.getReviewerDisplayName())
+                        .createdAt(review.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(reviewDTOs, pageable, reviewsPage.getTotalElements());
+    }
+
+    @Transactional
+    public void deleteReview(Long reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found with ID: " + reviewId));
+        try {
+            reviewRepository.delete(review);
+            reviewRepository.flush();
+        } catch (Exception e) {
+            throw e;
+        }
+        ParkingLot parkingLot = review.getReservation().getParkingLot();
+        recalculateAndSaveParkingLotAverageRating(parkingLot);
+    }
+
+    @Transactional
+    protected void recalculateAndSaveParkingLotAverageRating(ParkingLot parkingLot) {
+        if (parkingLot == null) {
+            throw new ResourceNotFoundException("Parking lot cannot be null for rating recalculation.");
+        }
+
+        List<Review> reviews = reviewRepository.findAllByReservationParkingLotId(parkingLot.getId());
+
+        if (reviews.isEmpty()) {
+            parkingLot.setAverageRating(0.0);
+        } else {
+            long sumOfRatings = 0;
+            for (Review r : reviews) {
+                sumOfRatings += r.getRating();
+            }
+            double newAverage = (double) sumOfRatings / reviews.size();
+            BigDecimal avgDecimal = BigDecimal.valueOf(newAverage).setScale(2, RoundingMode.HALF_UP);
+            parkingLot.setAverageRating(avgDecimal.doubleValue());
+        }
+        parkingLotRepository.save(parkingLot);
+    }
 }

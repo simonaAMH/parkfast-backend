@@ -212,6 +212,9 @@ public class ParkingLot {
     @JoinColumn(name = "owner_id")
     private User owner;
 
+    @Column(name = "average_rating")
+    private Double averageRating = 0.0;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 

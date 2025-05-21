@@ -24,6 +24,7 @@ public class ParkingLotMapper {
         dto.setId(parkingLot.getId());
         dto.setName(parkingLot.getName());
         dto.setAddress(parkingLot.getAddress());
+        dto.setAverageRating(parkingLot.getAverageRating());
         dto.setGpsCoordinates(parkingLot.getGpsCoordinates());
         dto.setDescription(parkingLot.getDescription());
         dto.setMaxVehicleHeight(parkingLot.getMaxVehicleHeight());
@@ -118,7 +119,6 @@ public class ParkingLotMapper {
 
         ParkingLot entity = new ParkingLot();
 
-        // Map DTO to entity
         updateEntityFromDTO(dto, entity);
 
         return entity;
@@ -133,6 +133,7 @@ public class ParkingLotMapper {
         if (dto.getDescription() != null) entity.setDescription(dto.getDescription());
         if (dto.getMaxVehicleHeight() != null) entity.setMaxVehicleHeight(dto.getMaxVehicleHeight());
         if (dto.getTotalSpots() != null) entity.setTotalSpots(dto.getTotalSpots());
+        if (dto.getAverageRating() != null) entity.setAverageRating(dto.getAverageRating());
         if (dto.getEvChargingSpots() != null) entity.setEvChargingSpots(dto.getEvChargingSpots());
         if (dto.getDisabilitySpots() != null) entity.setDisabilitySpots(dto.getDisabilitySpots());
         if (dto.getFamilySpots() != null) entity.setFamilySpots(dto.getFamilySpots());
@@ -183,18 +184,14 @@ public class ParkingLotMapper {
         if (dto.getExtensionPricingModel() != null) entity.setExtensionPricingModel(dto.getExtensionPricingModel());
         if (dto.getStatus() != null) entity.setStatus(dto.getStatus());
 
-        // Direct collection of enums
         if (dto.getTypes() != null && !dto.getTypes().isEmpty()) {
             entity.setTypes(new HashSet<>(dto.getTypes()));
         }
 
-        // Photos (string collection)
         if (dto.getPhotos() != null) {
             entity.setPhotos(new ArrayList<>(dto.getPhotos()));
         }
 
-        // Complex object mappings
-        // Custom Hour Intervals
         if (dto.getCustomHourIntervals() != null) {
             List<CustomHourInterval> customHourIntervals = dto.getCustomHourIntervals().stream()
                     .map(this::toCustomHourInterval)
@@ -202,7 +199,6 @@ public class ParkingLotMapper {
             entity.setCustomHourIntervals(customHourIntervals);
         }
 
-        // Price Intervals
         if (dto.getPriceIntervals() != null) {
             List<PriceInterval> priceIntervals = dto.getPriceIntervals().stream()
                     .map(this::toPriceInterval)
@@ -218,7 +214,7 @@ public class ParkingLotMapper {
         dto.setId(entity.getId());
         dto.setStartTime(entity.getStartTime());
         dto.setEndTime(entity.getEndTime());
-        dto.setDays(entity.getDays());  // Direct enum list assignment
+        dto.setDays(entity.getDays());
 
         return dto;
     }
@@ -230,7 +226,7 @@ public class ParkingLotMapper {
         entity.setId(dto.getId());
         entity.setStartTime(dto.getStartTime());
         entity.setEndTime(dto.getEndTime());
-        entity.setDays(dto.getDays());  // Direct enum list assignment
+        entity.setDays(dto.getDays());
 
         return entity;
     }
@@ -244,7 +240,7 @@ public class ParkingLotMapper {
         dto.setEndTime(entity.getEndTime());
         dto.setPrice(entity.getPrice());
         dto.setDuration(entity.getDuration());
-        dto.setDays(entity.getDays());  // Direct enum list assignment
+        dto.setDays(entity.getDays());
 
         return dto;
     }
@@ -258,7 +254,7 @@ public class ParkingLotMapper {
         entity.setEndTime(dto.getEndTime());
         entity.setPrice(dto.getPrice());
         entity.setDuration(dto.getDuration());
-        entity.setDays(dto.getDays());  // Direct enum list assignment
+        entity.setDays(dto.getDays());
 
         return entity;
     }

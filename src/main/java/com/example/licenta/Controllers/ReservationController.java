@@ -1,8 +1,6 @@
 package com.example.licenta.Controllers;
 
-import com.example.licenta.DTOs.ApiResponse;
-import com.example.licenta.DTOs.CreateReservationDTO;
-import com.example.licenta.DTOs.ReservationDTO;
+import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.Exceptions.InvalidDataException;
@@ -210,6 +208,31 @@ public class ReservationController {
                 "Payment processed successfully and reservation updated.",
                 updatedReservation
         );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{reservationId}/reviews")
+    public ResponseEntity<ApiResponse<ReviewDTO>> createReviewForReservation(
+            @PathVariable Long reservationId,
+            @Valid @RequestBody CreateReviewDTO createReviewDto) {
+        ReviewDTO createdReview = reservationService.createReview(reservationId, createReviewDto);
+        ApiResponse<ReviewDTO> response = new ApiResponse<>(
+                true, HttpStatus.CREATED.value(), "Review submitted successfully", createdReview);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{reservationId}/reviews")
+    public ResponseEntity<ApiResponse<ReviewDTO>> getReviewForReservation(@PathVariable Long reservationId) {
+        ReviewDTO reviewDTO = reservationService.getReviewByReservationId(reservationId);
+        ApiResponse<ReviewDTO> response = new ApiResponse<>(
+                true, HttpStatus.OK.value(), "Review retrieved successfully", reviewDTO);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/reviews/{reviewId}")
+    public ResponseEntity<ApiResponse<Void>> deleteReview( @PathVariable Long reviewId) {
+        reservationService.deleteReview(reviewId);
+        ApiResponse<Void> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Review deleted successfully", null);
         return ResponseEntity.ok(response);
     }
 }

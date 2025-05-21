@@ -54,6 +54,8 @@ public class ParkingLotDTO {
 
     private boolean hasVideoSurveillance;
 
+    private Double averageRating;
+
     private List<String> photos;
 
     @NotNull(message = "Total spots is required")

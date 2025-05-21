@@ -103,6 +103,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
+    @ExceptionHandler(ResourceAlreadyExistsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResourceAlreadyExistsException(ResourceAlreadyExistsException ex) {
+        List<String> errors = Collections.singletonList(ex.getMessage());
+
+        ApiResponse<Void> response = new ApiResponse<>(
+                false,
+                HttpStatus.CONFLICT.value(),
+                VALIDATION_FAILED,
+                errors
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFoundException(ResourceNotFoundException ex,
                                                                              HttpServletRequest request) {
