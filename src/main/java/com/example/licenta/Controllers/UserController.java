@@ -409,6 +409,9 @@ public class UserController {
         dto.setCreatedAt(user.getCreatedAt());
         dto.setUpdatedAt(user.getUpdatedAt());
         dto.setPhoneNumber(user.getPhoneNumber());
+        dto.setPaidEarnings(user.getPaidEarnings());
+        dto.setPendingEarnings(user.getPendingEarnings());
+        dto.setTotalEarnings(user.getTotalEarnings());
         return dto;
     }
 

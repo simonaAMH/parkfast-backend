@@ -2,12 +2,9 @@ package com.example.licenta.DTOs;
 
 import com.example.licenta.Enum.Reservation.ReservationType;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-
-import java.math.BigDecimal;
 
 @Data
 public class CreateReservationDTO {
@@ -33,12 +30,12 @@ public class CreateReservationDTO {
     private String guestName;
 
     @NotNull(message = "Total amount cannot be null")
-    private BigDecimal totalAmount;
+    private Double totalAmount;
 
     private Integer pointsUsed = 0;
 
     @NotNull(message = "Final amount cannot be null")
-    private BigDecimal finalAmount;
+    private Double finalAmount;
 
     @NotNull(message = "Reservation type cannot be null")
     private ReservationType reservationType = ReservationType.DIRECT;

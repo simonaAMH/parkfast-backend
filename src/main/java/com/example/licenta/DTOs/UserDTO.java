@@ -4,7 +4,6 @@ import com.example.licenta.Enum.User.Role;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Data
@@ -16,9 +15,9 @@ public class UserDTO {
     private String username;
     private String profileImage;
     private String phoneNumber;
-    private BigDecimal pendingEarnings;
-    private BigDecimal totalEarnings;
-    private BigDecimal paidEarnings;
+    private Double pendingEarnings;
+    private Double totalEarnings;
+    private Double paidEarnings;
     private Role role;
     private Integer loyaltyPoints;
     private boolean emailVerified;

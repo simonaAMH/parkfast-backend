@@ -7,9 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.GenericGenerator;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -54,15 +52,15 @@ public class Reservation {
     private String guestName;
 
     @NotNull
-    @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
-    private BigDecimal totalAmount;
+    @Column(name = "total_amount", nullable = false)
+    private Double totalAmount;
 
     @Column(name = "points_used", nullable = false)
     private Integer pointsUsed = 0;
 
     @NotNull
-    @Column(name = "final_amount", nullable = false, precision = 10, scale = 2)
-    private BigDecimal finalAmount;
+    @Column(name = "final_amount", nullable = false)
+    private Double finalAmount;
 
     @NotNull
     @Enumerated(EnumType.STRING)

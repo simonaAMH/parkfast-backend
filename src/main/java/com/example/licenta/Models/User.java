@@ -7,7 +7,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,14 +71,14 @@ public class User {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-    @Column(name = "pending_earnings", precision = 10, scale = 2)
-    private BigDecimal pendingEarnings = BigDecimal.ZERO;
+    @Column(name = "pending_earnings")
+    private Double pendingEarnings = 0.0;
 
-    @Column(name = "total_earnings", precision = 10, scale = 2)
-    private BigDecimal totalEarnings = BigDecimal.ZERO;
+    @Column(name = "total_earnings")
+    private Double totalEarnings = 0.0;
 
-    @Column(name = "paid_earnings", precision = 10, scale = 2)
-    private BigDecimal paidEarnings = BigDecimal.ZERO;
+    @Column(name = "paid_earnings")
+    private Double paidEarnings = 0.0;
 
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ParkingLot> parkingLots = new ArrayList<>();

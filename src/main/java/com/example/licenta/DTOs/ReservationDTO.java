@@ -4,7 +4,6 @@ import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Data
@@ -20,9 +19,9 @@ public class ReservationDTO {
     private String phoneNumber;
     private String guestEmail;
     private String guestName;
-    private BigDecimal totalAmount;
+    private Double totalAmount;
     private Integer pointsUsed;
-    private BigDecimal finalAmount;
+    private Double finalAmount;
     private ReservationType reservationType;
     private ReservationStatus status;
     private String qrCodeData;

@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
-import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -136,7 +135,7 @@ public class EmailService {
 
     public boolean sendReservationConfirmationEmail(String toEmail, String reservationId, String parkingLotName,
                                                     OffsetDateTime startTime, OffsetDateTime endTime,
-                                                    BigDecimal amountPaid, @Nullable String guestAccessToken) {
+                                                    Double amountPaid, @Nullable String guestAccessToken) {
         String subject = appName + ": Reservation Confirmed & Paid";
         String baseLink = frontendUrl + "/reservation/" + reservationId;
 
@@ -157,7 +156,7 @@ public class EmailService {
                         "<p style='color: #555; line-height: 1.5;'><strong>Parking Lot:</strong> " + parkingLotName + "</p>" +
                         "<p style='color: #555; line-height: 1.5;'><strong>Start Time:</strong> " + formatDateTimeForEmail(startTime) + " (GMT+03:00)</p>" +
                         (endTime != null ? "<p style='color: #555; line-height: 1.5;'><strong>End Time:</strong> " + formatDateTimeForEmail(endTime) + " (GMT+03:00)</p>" : "") +
-                        "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + (amountPaid != null ? amountPaid.setScale(2, RoundingMode.HALF_UP).toString() : "0.00") + " RON</p>" +
+                        "<p style='color: #555; line-height: 1.5;'><strong>Amount Paid:</strong> " + (amountPaid != null ? amountPaid : "0.00") + " RON</p>" +
                         "<div style='text-align: center; margin: 30px 0;'>" +
                         "<a href='" + viewReservationLink + "' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold;'>View Reservation</a>" +
                         "</div>" +

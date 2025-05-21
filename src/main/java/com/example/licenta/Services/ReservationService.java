@@ -131,7 +131,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public BigDecimal calculatePrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+    public Double calculatePrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
         if (parkingLotId == null) {
             throw new InvalidDataException("Parking lot ID is required.");
         }
@@ -192,7 +192,9 @@ public class ReservationService {
                         return generateRandomPrice(parkingLotId, startTime, endTime);
                     }
                     try {
-                        BigDecimal predictedPrice = new BigDecimal(cleanedPriceStr).setScale(2, RoundingMode.HALF_UP);
+                        BigDecimal predictedPriceBd = new BigDecimal(cleanedPriceStr);
+                        predictedPriceBd = predictedPriceBd.setScale(2, RoundingMode.HALF_UP);
+                        Double predictedPrice = predictedPriceBd.doubleValue();
                         System.out.println("AI Predicted Price: " + predictedPrice + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime);
                         return predictedPrice;
                     } catch (NumberFormatException e) {
@@ -214,9 +216,11 @@ public class ReservationService {
         }
     }
 
-    private BigDecimal generateRandomPrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+    private Double generateRandomPrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
         double randomPriceValue = 1.0 + (100.0 * random.nextDouble());
-        BigDecimal price = BigDecimal.valueOf(randomPriceValue).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal priceBd = BigDecimal.valueOf(randomPriceValue);
+        priceBd = priceBd.setScale(2, RoundingMode.HALF_UP);
+        Double price = priceBd.doubleValue();
         System.out.println("Generated Fallback/Mock Price: " + price + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime);
         return price;
     }
@@ -241,7 +245,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO updateReservationStatus(String reservationId, ReservationStatus newStatus, Integer pointsUsed, BigDecimal finalAmount) {
+    public ReservationDTO updateReservationStatus(String reservationId, ReservationStatus newStatus, Integer pointsUsed, Double finalAmount) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -345,7 +349,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, BigDecimal totalAmount) {
+    public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, Double totalAmount) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -442,24 +446,24 @@ public class ReservationService {
             }
 
             User owner = parkingLot.getOwner();
-            BigDecimal amountPaid = reservation.getFinalAmount();
+            Double amountPaid = reservation.getFinalAmount();
 
             if (amountPaid == null) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a final amount for payment processing.");
             }
-            if (amountPaid.compareTo(BigDecimal.ZERO) < 0) {
+            if (amountPaid  < 0) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") final amount cannot be negative.");
             }
 
             reservation.setStatus(ReservationStatus.PAID);
 
-            if (owner != null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(BigDecimal.ZERO);
-                BigDecimal currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(BigDecimal.ZERO);
-                owner.setPendingEarnings(currentPendingEarnings.add(amountPaid));
-                owner.setTotalEarnings(currentTotalEarnings.add(amountPaid));
+            if (owner != null && amountPaid.compareTo(0.0) > 0) {
+                Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
+                Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
+                owner.setPendingEarnings(currentPendingEarnings + amountPaid);
+                owner.setTotalEarnings(currentTotalEarnings + amountPaid);
                 userRepository.save(owner);
-            } else if (owner == null && amountPaid.compareTo(BigDecimal.ZERO) > 0) {
+            } else if (owner == null && amountPaid.compareTo(0.0) > 0) {
                 System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded.");
             }
 
@@ -618,8 +622,10 @@ public class ReservationService {
                 sumOfRatings += r.getRating();
             }
             double newAverage = (double) sumOfRatings / reviews.size();
-            BigDecimal avgDecimal = BigDecimal.valueOf(newAverage).setScale(2, RoundingMode.HALF_UP);
-            parkingLot.setAverageRating(avgDecimal.doubleValue());
+            BigDecimal bdAverage = BigDecimal.valueOf(newAverage);
+            BigDecimal roundedAverage = bdAverage.setScale(2, RoundingMode.HALF_UP);
+
+            parkingLot.setAverageRating(roundedAverage.doubleValue());
         }
         parkingLotRepository.save(parkingLot);
     }
