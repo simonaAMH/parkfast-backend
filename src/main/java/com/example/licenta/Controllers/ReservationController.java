@@ -45,7 +45,7 @@ public class ReservationController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationById(@PathVariable String id) {
         ReservationDTO reservationDTO = reservationService.getReservationById(id);
         ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Reservation retrieved successfully", reservationDTO);
         return ResponseEntity.ok(response);
@@ -53,7 +53,7 @@ public class ReservationController {
 
     @GetMapping("/{id}/guest-access")
     public ResponseEntity<ApiResponse<ReservationDTO>> getReservationByIdForGuest(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestParam String token) {
         ReservationDTO reservationDTO = reservationService.getReservationByIdForGuest(id, token);
         ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Reservation retrieved successfully", reservationDTO);
@@ -62,7 +62,7 @@ public class ReservationController {
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getReservationsByUser(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestParam(required = false) List<ReservationType> types,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -88,7 +88,7 @@ public class ReservationController {
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<ReservationDTO>> updateReservationStatus(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestParam ReservationStatus status,
             @RequestParam(required = false) Integer pointsUsed,
             @RequestParam(required = false) BigDecimal finalAmount
@@ -107,7 +107,7 @@ public class ReservationController {
 
     @GetMapping("/calculate-price")
     public ResponseEntity<ApiResponse<Map<String, BigDecimal>>> calculatePrice(
-            @RequestParam Long parkingLotId,
+            @RequestParam String parkingLotId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startTime,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endTime) {
 
@@ -127,7 +127,7 @@ public class ReservationController {
     }
 
     @GetMapping("/user/{userId}/active")
-    public ResponseEntity<ApiResponse<ReservationDTO>> getActiveReservation(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<ReservationDTO>> getActiveReservation(@PathVariable String userId) {
         Optional<ReservationDTO> activeReservationOpt = reservationService.findActiveReservation(userId);
 
         if (activeReservationOpt.isPresent()) {
@@ -150,7 +150,7 @@ public class ReservationController {
     }
 
     @GetMapping("/user/{userId}/upcoming")
-    public ResponseEntity<ApiResponse<ReservationDTO>> getUpcomingReservation(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<ReservationDTO>> getUpcomingReservation(@PathVariable String userId) {
         Optional<ReservationDTO> upcomingReservationOpt = reservationService.findUpcomingReservation(userId);
 
         if (upcomingReservationOpt.isPresent()) {
@@ -174,7 +174,7 @@ public class ReservationController {
 
     @PostMapping("/{id}/end")
     public ResponseEntity<ApiResponse<ReservationDTO>> endActiveReservation(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestBody Map<String, Object> requestBody) {
 
         String endTimeStr = (String) requestBody.get("endTime");
@@ -200,7 +200,7 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
     @PostMapping("/{id}/payment-success")
-    public ResponseEntity<ApiResponse<ReservationDTO>> handleSuccessfulPayment(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<ReservationDTO>> handleSuccessfulPayment(@PathVariable String id) {
         ReservationDTO updatedReservation = reservationService.handleSuccessfulPayment(id);
         ApiResponse<ReservationDTO> response = new ApiResponse<>(
                 true,
@@ -213,7 +213,7 @@ public class ReservationController {
 
     @PostMapping("/{reservationId}/reviews")
     public ResponseEntity<ApiResponse<ReviewDTO>> createReviewForReservation(
-            @PathVariable Long reservationId,
+            @PathVariable String reservationId,
             @Valid @RequestBody CreateReviewDTO createReviewDto) {
         ReviewDTO createdReview = reservationService.createReview(reservationId, createReviewDto);
         ApiResponse<ReviewDTO> response = new ApiResponse<>(
@@ -222,7 +222,7 @@ public class ReservationController {
     }
 
     @GetMapping("/{reservationId}/reviews")
-    public ResponseEntity<ApiResponse<ReviewDTO>> getReviewForReservation(@PathVariable Long reservationId) {
+    public ResponseEntity<ApiResponse<ReviewDTO>> getReviewForReservation(@PathVariable String reservationId) {
         ReviewDTO reviewDTO = reservationService.getReviewByReservationId(reservationId);
         ApiResponse<ReviewDTO> response = new ApiResponse<>(
                 true, HttpStatus.OK.value(), "Review retrieved successfully", reviewDTO);
@@ -230,7 +230,7 @@ public class ReservationController {
     }
 
     @DeleteMapping("/reviews/{reviewId}")
-    public ResponseEntity<ApiResponse<Void>> deleteReview( @PathVariable Long reviewId) {
+    public ResponseEntity<ApiResponse<Void>> deleteReview( @PathVariable String reviewId) {
         reservationService.deleteReview(reviewId);
         ApiResponse<Void> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Review deleted successfully", null);
         return ResponseEntity.ok(response);

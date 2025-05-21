@@ -25,5 +25,5 @@ public class CreateNotificationDTO {
     @Size(max = 255, message = "Reference ID cannot exceed 255 characters")
     private String referenceId;
 
-    private Long userId;
+    private String userId;
 }

@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserPaymentMethodRepository extends JpaRepository<UserPaymentMethod, Long> {
-    List<UserPaymentMethod> findByUserId(Long userId);
+public interface UserPaymentMethodRepository extends JpaRepository<UserPaymentMethod, String> {
+    List<UserPaymentMethod> findByUserId(String userId);
 
-    Optional<UserPaymentMethod> findByUserIdAndId(Long userId, Long id);
+    Optional<UserPaymentMethod> findByUserIdAndId(String userId, String id);
 }

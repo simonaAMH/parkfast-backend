@@ -8,6 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ClosestParkingLotInfoDTO {
-    private Long parkingLotId;
+    private String parkingLotId;
     private Double distanceToUserInMeters;
 }

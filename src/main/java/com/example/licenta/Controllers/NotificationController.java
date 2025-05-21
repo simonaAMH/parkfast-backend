@@ -48,7 +48,7 @@ public class NotificationController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<NotificationDTO>> createNotification(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @Valid @RequestBody CreateNotificationDTO createDto) {
 
         NotificationType notificationType = null;
@@ -71,7 +71,7 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<NotificationDTO>>> getNotificationsForUser(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
@@ -86,8 +86,8 @@ public class NotificationController {
 
     @PutMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<NotificationDTO>> markNotificationAsRead(
-            @PathVariable Long userId,
-            @PathVariable Long notificationId) {
+            @PathVariable String userId,
+            @PathVariable String notificationId) {
 
         Notification notification = notificationService.markNotificationAsRead(notificationId, userId);
         NotificationDTO notificationDto = convertToDto(notification);
@@ -98,7 +98,7 @@ public class NotificationController {
 
     @PutMapping("/read-all")
     public ResponseEntity<ApiResponse<Map<String, Object>>> markAllNotificationsAsRead(
-            @PathVariable Long userId) {
+            @PathVariable String userId) {
 
         int updatedCount = notificationService.markAllNotificationsAsReadForUser(userId);
         Map<String, Object> responseData = Map.of(
@@ -111,7 +111,7 @@ public class NotificationController {
     }
 
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Long>> getUnreadNotificationCount(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<Long>> getUnreadNotificationCount(@PathVariable String userId) {
         long count = notificationService.getUnreadNotificationCountForUser(userId);
         ApiResponse<Long> response = new ApiResponse<>(
                 true, HttpStatus.OK.value(), "Unread notification count retrieved", count);

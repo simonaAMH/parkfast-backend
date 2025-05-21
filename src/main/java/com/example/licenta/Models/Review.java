@@ -17,8 +17,9 @@ import java.time.OffsetDateTime;
 public class Review {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false, length = 36)
+    private String id;
 
     @NotNull
     @Min(value = 1, message = "Rating must be at least 1")

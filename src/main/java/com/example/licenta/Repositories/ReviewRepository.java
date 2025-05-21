@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ReviewRepository extends JpaRepository<Review, Long> {
-    boolean existsByReservationId(Long reservationId);
-    Optional<Review> findByReservationId(Long reservationId);
+public interface ReviewRepository extends JpaRepository<Review, String> {
+    boolean existsByReservationId(String reservationId);
+    Optional<Review> findByReservationId(String reservationId);
     @Query("SELECT r FROM Review r WHERE r.reservation.parkingLot.id = :parkingLotId")
-    Page<Review> findReviewsByParkingLotId(@Param("parkingLotId") Long parkingLotId, Pageable pageable);
+    Page<Review> findReviewsByParkingLotId(@Param("parkingLotId") String parkingLotId, Pageable pageable);
     @Query("SELECT r FROM Review r WHERE r.reservation.parkingLot.id = :parkingLotId")
-    List<Review> findAllByReservationParkingLotId(@Param("parkingLotId") Long parkingLotId);
+    List<Review> findAllByReservationParkingLotId(@Param("parkingLotId") String parkingLotId);
 }

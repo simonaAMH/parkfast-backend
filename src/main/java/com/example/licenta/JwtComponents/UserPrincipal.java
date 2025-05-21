@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class UserPrincipal implements UserDetails {
-    private Long id;
+    private String id;
     private String name;
     private String username;
 
@@ -30,7 +30,7 @@ public class UserPrincipal implements UserDetails {
 
     private Map<String, Object> attributes;
 
-    public UserPrincipal(Long id, String username, String email, String password, Role role,
+    public UserPrincipal(String id, String username, String email, String password, Role role,
                          Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
@@ -54,7 +54,7 @@ public class UserPrincipal implements UserDetails {
         );
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 

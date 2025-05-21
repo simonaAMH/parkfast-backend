@@ -27,7 +27,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public Notification createNotification(Long userId, String title, String body, NotificationType type, String referenceId) {
+    public Notification createNotification(String userId, String title, String body, NotificationType type, String referenceId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
@@ -41,7 +41,7 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Notification> getNotificationsForUser(Long userId, Pageable pageable) {
+    public Page<Notification> getNotificationsForUser(String userId, Pageable pageable) {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId + ". Cannot fetch notifications.");
         }
@@ -49,7 +49,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public Notification markNotificationAsRead(Long notificationId, Long userIdPerformingAction) {
+    public Notification markNotificationAsRead(String notificationId, String userIdPerformingAction) {
         Notification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Notification not found with ID: " + notificationId));
 
@@ -62,7 +62,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public int markAllNotificationsAsReadForUser(Long userId) {
+    public int markAllNotificationsAsReadForUser(String userId) {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId + ". Cannot mark all notifications as read.");
         }
@@ -70,7 +70,7 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public long getUnreadNotificationCountForUser(Long userId) {
+    public long getUnreadNotificationCountForUser(String userId) {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId + ". Cannot get unread count.");
         }

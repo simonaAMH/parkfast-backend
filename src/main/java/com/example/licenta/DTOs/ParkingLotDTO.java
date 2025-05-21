@@ -17,7 +17,7 @@ import lombok.Data;
 @Data
 @ParkingLotConstraint
 public class ParkingLotDTO {
-    private Long id;
+    private String id;
 
     @NotBlank(message = "Name is required")
     @Size(min = 3, max = 100, message = "Name must be between 3 and 100 characters")
@@ -36,7 +36,7 @@ public class ParkingLotDTO {
     private ParkingLotCategory category;
 
     @NotNull(message = "Owner ID is required")
-    private Long ownerId;
+    private String ownerId;
 
     @NotEmpty(message = "At least one parking lot type is required")
     @Enumerated(EnumType.STRING)

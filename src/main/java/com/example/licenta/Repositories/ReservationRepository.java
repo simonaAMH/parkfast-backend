@@ -13,15 +13,15 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ReservationRepository extends JpaRepository<Reservation, Long> {
+public interface ReservationRepository extends JpaRepository<Reservation, String> {
 
-    Page<Reservation> findByUserId(Long userId, Pageable pageable);
+    Page<Reservation> findByUserId(String userId, Pageable pageable);
 
-    Page<Reservation> findByUserIdAndReservationTypeIn(Long userId, List<ReservationType> reservationTypes, Pageable pageable);
+    Page<Reservation> findByUserIdAndReservationTypeIn(String userId, List<ReservationType> reservationTypes, Pageable pageable);
 
     // For getActiveReservation
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
-            Long userId,
+            String userId,
             ReservationType reservationType,
             OffsetDateTime currentTime,
             OffsetDateTime currentTimeAgain,
@@ -29,7 +29,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     );
 
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatusOrderByStartTimeDesc(
-            Long userId,
+            String userId,
             ReservationType reservationType,
             OffsetDateTime currentTime,
             ReservationStatus status
@@ -37,7 +37,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     // For getUpcomingReservation
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
-            Long userId,
+            String userId,
             ReservationType reservationType,
             OffsetDateTime currentTime,
             ReservationStatus status

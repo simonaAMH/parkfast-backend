@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class UserPaymentMethodDTO {
-    private Long id;
+    private String id;
 
     @NotBlank(message = "Card number is required")
     @Size(min = 13, max = 24, message = "Invalid card number length")

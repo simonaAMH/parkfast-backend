@@ -196,8 +196,8 @@ public class UserController {
 
 
     @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<UserDTO>> getUserById(@PathVariable Long userId) {
-        if (userId == null || userId <= 0) {
+    public ResponseEntity<ApiResponse<UserDTO>> getUserById(@PathVariable String userId) {
+        if (userId == null || userId.isEmpty()) {
             throw new InvalidDataException("Valid user ID is required");
         }
 
@@ -220,9 +220,9 @@ public class UserController {
     }
 
     @PutMapping("/{userId}")
-    public ResponseEntity<ApiResponse<UserDTO>> updateUser(@PathVariable Long userId,
+    public ResponseEntity<ApiResponse<UserDTO>> updateUser(@PathVariable String userId,
                                                            @Valid @RequestBody UserUpdateDTO updateDto) {
-        if (userId == null || userId <= 0) {
+        if (userId == null || userId.isEmpty()) {
             throw new InvalidDataException("Valid user ID is required");
         }
 
@@ -247,7 +247,7 @@ public class UserController {
             throw new AuthenticationException("Invalid refresh token");
         }
 
-        Long userId = tokenProvider.getUserIdFromJWT(refreshToken);
+        String userId = tokenProvider.getUserIdFromJWT(refreshToken);
 
         User user = userService.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -275,10 +275,10 @@ public class UserController {
 
     @PutMapping("/{userId}/use-points")
     public ResponseEntity<ApiResponse<UserDTO>> useLoyaltyPoints(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestParam @Min(value = 1, message = "Points to use must be at least 1") int points) {
 
-        if (userId == null || userId <= 0) {
+        if (userId == null || userId.isEmpty()) {
             throw new InvalidDataException("Valid user ID is required");
         }
 
@@ -296,7 +296,7 @@ public class UserController {
 
     @PostMapping("/{userId}/vehicle-plates")
     public ResponseEntity<ApiResponse<UserVehiclePlateDTO>> addVehiclePlate(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @Valid @RequestBody UserVehiclePlateDTO plateDto) {
 
         UserVehiclePlate savedPlate = userService.addVehiclePlate(userId, plateDto);
@@ -313,7 +313,7 @@ public class UserController {
 
     @GetMapping("/{userId}/vehicle-plates")
     public ResponseEntity<ApiResponse<List<UserVehiclePlateDTO>>> getVehiclePlates(
-            @PathVariable Long userId) {
+            @PathVariable String userId) {
 
         List<UserVehiclePlate> plates = userService.getVehiclePlates(userId);
         List<UserVehiclePlateDTO> plateDtos = plates.stream()
@@ -331,8 +331,8 @@ public class UserController {
 
     @DeleteMapping("/{userId}/vehicle-plates/{plateId}")
     public ResponseEntity<ApiResponse<Void>> deleteVehiclePlate(
-            @PathVariable Long userId,
-            @PathVariable Long plateId) {
+            @PathVariable String userId,
+            @PathVariable String plateId) {
 
         userService.deleteVehiclePlate(userId, plateId);
 
@@ -348,7 +348,7 @@ public class UserController {
     // Payment Method endpoints
     @PostMapping("/{userId}/payment-methods")
     public ResponseEntity<ApiResponse<UserPaymentMethodDTO>> addPaymentMethod(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @Valid @RequestBody UserPaymentMethodDTO methodDto) {
 
         UserPaymentMethod savedMethod = userService.addPaymentMethod(userId, methodDto);
@@ -365,7 +365,7 @@ public class UserController {
 
     @GetMapping("/{userId}/payment-methods")
     public ResponseEntity<ApiResponse<List<UserPaymentMethodDTO>>> getPaymentMethods(
-            @PathVariable Long userId) {
+            @PathVariable String userId) {
 
         List<UserPaymentMethod> methods = userService.getPaymentMethods(userId);
         List<UserPaymentMethodDTO> methodDtos = methods.stream()
@@ -383,8 +383,8 @@ public class UserController {
 
     @DeleteMapping("/{userId}/payment-methods/{methodId}")
     public ResponseEntity<ApiResponse<Void>> deletePaymentMethod(
-            @PathVariable Long userId,
-            @PathVariable Long methodId) {
+            @PathVariable String userId,
+            @PathVariable String methodId) {
 
         userService.deletePaymentMethod(userId, methodId);
 

@@ -101,7 +101,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 logger.trace("Token validation result: {}", isValid);
 
                 if (isValid) {
-                    Long userId = tokenProvider.getUserIdFromJWT(jwt);
+                    String userId = tokenProvider.getUserIdFromJWT(jwt);
                     logger.trace("User ID from token: {}", userId);
 
                     UserDetails userDetails = userDetailsService.loadUserById(userId);

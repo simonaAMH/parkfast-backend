@@ -43,7 +43,7 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public ParkingLot createParkingLot(ParkingLotDTO dto, Long ownerId) {
+    public ParkingLot createParkingLot(ParkingLotDTO dto, String ownerId) {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + ownerId));
 
@@ -59,7 +59,7 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public ParkingLot updateParkingLot(Long parkingLotId, ParkingLotDTO dto, Long userId) {
+    public ParkingLot updateParkingLot(String parkingLotId, ParkingLotDTO dto, String userId) {
         ParkingLot existingParkingLot = parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found with ID: " + parkingLotId));
 
@@ -74,7 +74,7 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public void deleteParkingLot(Long parkingLotId, Long userId) {
+    public void deleteParkingLot(String parkingLotId, String userId) {
         ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found with ID: " + parkingLotId));
 
@@ -104,7 +104,7 @@ public class ParkingLotService {
     }
 
     @Transactional(readOnly = true)
-    public ParkingLot getParkingLotById(Long id) {
+    public ParkingLot getParkingLotById(String id) {
         return parkingLotRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found with ID: " + id));
     }

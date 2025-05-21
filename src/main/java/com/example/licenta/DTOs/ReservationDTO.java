@@ -9,10 +9,10 @@ import java.time.OffsetDateTime;
 
 @Data
 public class ReservationDTO {
-    private Long id;
-    private Long parkingLotId;
+    private String id;
+    private String parkingLotId;
     private String parkingLotName;
-    private Long userId;
+    private String userId;
     private String username;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;

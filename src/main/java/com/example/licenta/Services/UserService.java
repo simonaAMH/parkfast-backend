@@ -167,7 +167,7 @@ public class UserService {
     }
 
     @Transactional
-    public User updateUser(Long userId, UserUpdateDTO updateDto) {
+    public User updateUser(String userId, UserUpdateDTO updateDto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
@@ -243,7 +243,7 @@ public class UserService {
     }
 
     @Transactional
-    public User useLoyaltyPoints(Long userId, int pointsToUse) {
+    public User useLoyaltyPoints(String userId, int pointsToUse) {
         if (pointsToUse <= 0) {
             throw new InvalidDataException("Points to use must be positive.");
         }
@@ -263,7 +263,7 @@ public class UserService {
     }
 
     @Transactional
-    public UserVehiclePlate addVehiclePlate(Long userId, UserVehiclePlateDTO plateDto) {
+    public UserVehiclePlate addVehiclePlate(String userId, UserVehiclePlateDTO plateDto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
@@ -280,7 +280,7 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteVehiclePlate(Long userId, Long plateId) {
+    public void deleteVehiclePlate(String userId, String plateId) {
         UserVehiclePlate plate = vehiclePlateRepository.findByUserIdAndId(userId, plateId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Vehicle plate not found with ID: " + plateId + " for user: " + userId));
@@ -289,7 +289,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserVehiclePlate> getVehiclePlates(Long userId) {
+    public List<UserVehiclePlate> getVehiclePlates(String userId) {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId);
         }
@@ -297,7 +297,7 @@ public class UserService {
     }
 
     @Transactional
-    public UserPaymentMethod addPaymentMethod(Long userId, UserPaymentMethodDTO methodDto) {
+    public UserPaymentMethod addPaymentMethod(String userId, UserPaymentMethodDTO methodDto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
 
@@ -317,7 +317,7 @@ public class UserService {
     }
 
     @Transactional
-    public void deletePaymentMethod(Long userId, Long methodId) {
+    public void deletePaymentMethod(String userId, String methodId) {
         UserPaymentMethod method = paymentMethodRepository.findByUserIdAndId(userId, methodId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Payment method not found with ID: " + methodId + " for user: " + userId));
@@ -326,7 +326,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserPaymentMethod> getPaymentMethods(Long userId) {
+    public List<UserPaymentMethod> getPaymentMethods(String userId) {
         if (!userRepository.existsById(userId)) {
             throw new ResourceNotFoundException("User not found with ID: " + userId);
         }
@@ -334,7 +334,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<User> findById(Long id) {
+    public Optional<User> findById(String id) {
         return userRepository.findById(id);
     }
 

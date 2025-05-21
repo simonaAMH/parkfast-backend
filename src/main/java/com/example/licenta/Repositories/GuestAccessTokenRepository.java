@@ -8,8 +8,8 @@ import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Repository
-public interface GuestAccessTokenRepository extends JpaRepository<GuestAccessToken, Long> {
-    Optional<GuestAccessToken> findByTokenAndReservationId(String token, Long reservationId);
+public interface GuestAccessTokenRepository extends JpaRepository<GuestAccessToken, String> {
+    Optional<GuestAccessToken> findByTokenAndReservationId(String token, String reservationId);
     Optional<GuestAccessToken> findByToken(String token);
     void deleteByExpiresAtBefore(OffsetDateTime now);
 }

@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class UserVehiclePlateDTO {
-    private Long id;
+    private String id;
 
     @NotBlank(message = "Plate number is required")
     @Size(max = 15, message = "Plate number cannot exceed 15 characters")

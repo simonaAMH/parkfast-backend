@@ -13,14 +13,14 @@ import java.math.BigDecimal;
 public class CreateReservationDTO {
 
     @NotNull(message = "Parking lot ID cannot be null")
-    private Long parkingLotId;
+    private String parkingLotId;
 
-    private Long userId;
+    private String userId;
 
     @NotBlank(message = "Start time cannot be blank")
-    private String startTime; // ISO 8601 format
+    private String startTime;
 
-    private String endTime; // ISO 8601 format
+    private String endTime;
 
     @NotBlank(message = "Vehicle plate cannot be blank")
     private String vehiclePlate;

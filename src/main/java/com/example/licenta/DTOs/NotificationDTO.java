@@ -10,8 +10,8 @@ import java.time.OffsetDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NotificationDTO {
-    private Long id;
-    private Long userId;
+    private String id;
+    private String userId;
     private String title;
     private String body;
     private String type;

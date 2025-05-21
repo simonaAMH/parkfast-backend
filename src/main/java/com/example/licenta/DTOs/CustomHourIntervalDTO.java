@@ -10,7 +10,7 @@ import java.util.List;
 
 @Data
 public class CustomHourIntervalDTO {
-    private Long id;
+    private String id;
 
     @NotBlank(message = "Start time is required")
     @Pattern(regexp = "^([01]?[0-9]|2[0-3]):[0-5][0-9]$",

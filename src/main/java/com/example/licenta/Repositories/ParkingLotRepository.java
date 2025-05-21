@@ -14,7 +14,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface ParkingLotRepository extends JpaRepository<ParkingLot, Long> {
+public interface ParkingLotRepository extends JpaRepository<ParkingLot, String> {
 
     Page<ParkingLot> findByOwner(User owner, Pageable pageable);
     Page<ParkingLot> findByAllowDirectPaymentTrue(Pageable pageable);

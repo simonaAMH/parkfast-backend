@@ -81,7 +81,7 @@ public class ParkingLotController {
     }
 
     @GetMapping("/check-location-inside")
-    public ResponseEntity<ApiResponse<Long>> checkUserLocationInsideParkingLot(
+    public ResponseEntity<ApiResponse<String>> checkUserLocationInsideParkingLot(
                                                                                 @RequestParam double latitude,
                                                                                 @RequestParam double longitude,
                                                                                 @RequestParam double accuracy) {
@@ -93,8 +93,8 @@ public class ParkingLotController {
         Optional<ParkingLot> foundLotOpt = parkingLotService.findParkingLotAtUserLocation(latitude, longitude, accuracy);
 
         if (foundLotOpt.isPresent()) {
-            Long parkingLotId = foundLotOpt.get().getId();
-            ApiResponse<Long> response = new ApiResponse<>(
+            String parkingLotId = foundLotOpt.get().getId();
+            ApiResponse<String> response = new ApiResponse<>(
                     true,
                     HttpStatus.OK.value(),
                     "User is inside this parking lot",
@@ -102,7 +102,7 @@ public class ParkingLotController {
             );
             return ResponseEntity.ok(response);
         } else {
-            ApiResponse<Long> response = new ApiResponse<>(
+            ApiResponse<String> response = new ApiResponse<>(
                     true,
                     HttpStatus.OK.value(),
                     "User is not inside any known active parking lot",
@@ -146,7 +146,7 @@ public class ParkingLotController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ParkingLotDTO>> getParkingLotById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<ParkingLotDTO>> getParkingLotById(@PathVariable String id) {
         ParkingLot parkingLot = parkingLotService.getParkingLotById(id);
         ParkingLotDTO responseDTO = parkingLotMapper.toDTO(parkingLot);
         ApiResponse<ParkingLotDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Parking lot retrieved successfully", responseDTO);
@@ -154,8 +154,8 @@ public class ParkingLotController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getParkingLotsByUser( // Return type changed to Map
-                                                                                  @PathVariable Long userId,
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getParkingLotsByUser(
+                                                                                  @PathVariable String userId,
                                                                                   @RequestParam(defaultValue = "0") int page,
                                                                                   @RequestParam(defaultValue = "10") int size,
                                                                                   @RequestParam(defaultValue = "updatedAt") String sortBy,
@@ -209,7 +209,7 @@ public class ParkingLotController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> updateParkingLot(
-            @PathVariable Long id,
+            @PathVariable String id,
             @Valid @RequestBody ParkingLotDTO parkingLotDTO) {
         ParkingLot parkingLot = parkingLotService.getParkingLotById(id);
         ParkingLot updatedParkingLot = parkingLotService.updateParkingLot(id, parkingLotDTO, parkingLot.getOwner().getId());
@@ -219,7 +219,7 @@ public class ParkingLotController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<?>> deleteParkingLot(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<?>> deleteParkingLot(@PathVariable String id) {
         ParkingLot parkingLot = parkingLotService.getParkingLotById(id);
         parkingLotService.deleteParkingLot(id, parkingLot.getOwner().getId());
         ApiResponse<Void> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Parking lot deleted successfully", null);
@@ -328,7 +328,7 @@ public class ParkingLotController {
 
     @GetMapping("/{parkingLotId}/reviews")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getReviewsForParkingLot(
-            @PathVariable Long parkingLotId,
+            @PathVariable String parkingLotId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,

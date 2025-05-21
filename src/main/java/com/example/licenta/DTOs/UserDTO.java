@@ -10,7 +10,7 @@ import java.time.OffsetDateTime;
 @NoArgsConstructor
 public class UserDTO {
 
-    private Long id;
+    private String id;
     private String email;
     private String username;
     private String profileImage;

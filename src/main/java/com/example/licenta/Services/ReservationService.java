@@ -7,15 +7,12 @@ import com.example.licenta.DTOs.ReviewDTO;
 import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
-import com.example.licenta.Exceptions.AuthenticationException;
 import com.example.licenta.Exceptions.InvalidDataException;
 import com.example.licenta.Exceptions.ResourceAlreadyExistsException;
 import com.example.licenta.Exceptions.ResourceNotFoundException;
 import com.example.licenta.Mappers.ReservationMapper;
 import com.example.licenta.Models.*;
 import com.example.licenta.Repositories.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -127,14 +124,14 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public ReservationDTO getReservationById(Long id) {
+    public ReservationDTO getReservationById(String id) {
         Reservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + id));
         return reservationMapper.toDTO(reservation);
     }
 
     @Transactional(readOnly = true)
-    public BigDecimal calculatePrice(Long parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+    public BigDecimal calculatePrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
         if (parkingLotId == null) {
             throw new InvalidDataException("Parking lot ID is required.");
         }
@@ -217,7 +214,7 @@ public class ReservationService {
         }
     }
 
-    private BigDecimal generateRandomPrice(Long parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+    private BigDecimal generateRandomPrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
         double randomPriceValue = 1.0 + (100.0 * random.nextDouble());
         BigDecimal price = BigDecimal.valueOf(randomPriceValue).setScale(2, RoundingMode.HALF_UP);
         System.out.println("Generated Fallback/Mock Price: " + price + " for Lot ID: " + parkingLotId + " Start: " + startTime + " End: " + endTime);
@@ -225,7 +222,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ReservationDTO> getReservationsByUserId(Long userId, List<ReservationType> types, Pageable pageable) {
+    public Page<ReservationDTO> getReservationsByUserId(String userId, List<ReservationType> types, Pageable pageable) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
@@ -244,7 +241,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO updateReservationStatus(Long reservationId, ReservationStatus newStatus, Integer pointsUsed, BigDecimal finalAmount) {
+    public ReservationDTO updateReservationStatus(String reservationId, ReservationStatus newStatus, Integer pointsUsed, BigDecimal finalAmount) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -265,7 +262,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReservationDTO> findActiveReservation(Long userId) {
+    public Optional<ReservationDTO> findActiveReservation(String userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
@@ -307,7 +304,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReservationDTO> findUpcomingReservation(Long userId) {
+    public Optional<ReservationDTO> findUpcomingReservation(String userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
@@ -348,7 +345,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO endActiveReservation(Long reservationId, OffsetDateTime endTime, BigDecimal totalAmount) {
+    public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, BigDecimal totalAmount) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -366,7 +363,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO handleSuccessfulPayment(Long reservationId) {
+    public ReservationDTO handleSuccessfulPayment(String reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -465,7 +462,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public ReservationDTO getReservationByIdForGuest(Long reservationId, String token) {
+    public ReservationDTO getReservationByIdForGuest(String reservationId, String token) {
         GuestAccessToken accessToken = guestAccessTokenRepository.findByTokenAndReservationId(token, reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired access token for this reservation."));
 
@@ -482,7 +479,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReviewDTO createReview(Long reservationId, CreateReviewDTO reviewDto) {
+    public ReviewDTO createReview(String reservationId, CreateReviewDTO reviewDto) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -535,7 +532,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public ReviewDTO getReviewByReservationId(Long reservationId) {
+    public ReviewDTO getReviewByReservationId(String reservationId) {
         Review review = reviewRepository.findByReservationId(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
 
@@ -551,7 +548,7 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ReviewDTO> getReviewsByParkingLotId(Long parkingLotId, Pageable pageable) {
+    public Page<ReviewDTO> getReviewsByParkingLotId(String parkingLotId, Pageable pageable) {
         parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found with ID: " + parkingLotId));
 
@@ -573,7 +570,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public void deleteReview(Long reviewId) {
+    public void deleteReview(String reviewId) {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found with ID: " + reviewId));
         try {

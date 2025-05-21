@@ -12,11 +12,11 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 @Builder
 public class ReviewDTO {
-    private Long id;
+    private String id;
     private Integer rating;
     private String comment;
-    private Long reservationId;
-    private Long userId;
+    private String reservationId;
+    private String userId;
     private String reviewerDisplayName;
     private OffsetDateTime createdAt;
 }

@@ -11,10 +11,10 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserVehiclePlateRepository extends JpaRepository<UserVehiclePlate, Long> {
-    List<UserVehiclePlate> findByUserId(Long userId);
+public interface UserVehiclePlateRepository extends JpaRepository<UserVehiclePlate, String> {
+    List<UserVehiclePlate> findByUserId(String userId);
 
-    Optional<UserVehiclePlate> findByUserIdAndId(Long userId, Long id);
+    Optional<UserVehiclePlate> findByUserIdAndId(String userId, String id);
 
-    boolean existsByUserIdAndPlateNumber(Long userId, String plateNumber);
+    boolean existsByUserIdAndPlateNumber(String userId, String plateNumber);
 }

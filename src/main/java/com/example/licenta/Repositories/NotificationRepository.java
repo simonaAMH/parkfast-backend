@@ -12,15 +12,15 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface NotificationRepository extends JpaRepository<Notification, Long> {
+public interface NotificationRepository extends JpaRepository<Notification, String> {
 
-    Page<Notification> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+    Page<Notification> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
 
-    List<Notification> findByUserIdAndIsReadIsFalseOrderByCreatedAtDesc(Long userId);
+    List<Notification> findByUserIdAndIsReadIsFalseOrderByCreatedAtDesc(String userId);
 
-    long countByUserIdAndIsReadIsFalse(Long userId);
+    long countByUserIdAndIsReadIsFalse(String userId);
 
     @Modifying
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false")
-    int markAllAsReadForUser(@Param("userId") Long userId);
+    int markAllAsReadForUser(@Param("userId") String userId);
 }
