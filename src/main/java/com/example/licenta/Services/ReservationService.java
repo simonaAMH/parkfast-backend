@@ -28,11 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Random;
 import java.math.RoundingMode;
 
 @Service
@@ -267,86 +264,110 @@ public class ReservationService {
 
     @Transactional(readOnly = true)
     public Optional<ReservationDTO> findActiveReservation(String userId) {
-        User user = userRepository.findById(userId)
+        userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         OffsetDateTime now = OffsetDateTime.now();
 
         Optional<Reservation> standardActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
-                userId,
-                ReservationType.STANDARD,
-                now,
-                now,
-                ReservationStatus.PAID
-        );
+                userId, ReservationType.STANDARD, now, now, ReservationStatus.PAID);
+        if (standardActive.isPresent()) return Optional.of(reservationMapper.toDTO(standardActive.get()));
+
+        Optional<Reservation> directActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
+                userId, ReservationType.DIRECT, now, now, ReservationStatus.PAID);
+        if (directActive.isPresent()) return Optional.of(reservationMapper.toDTO(directActive.get()));
 
         Optional<Reservation> payForUsageActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatusOrderByStartTimeDesc(
-                userId,
-                ReservationType.PAY_FOR_USAGE,
-                now,
-                ReservationStatus.ACTIVE
-        );
-
-        if (standardActive.isPresent() && payForUsageActive.isPresent()) {
-            Reservation standard = standardActive.get();
-            Reservation payForUsage = payForUsageActive.get();
-
-            return Optional.of(reservationMapper.toDTO(
-                    standard.getStartTime().isAfter(payForUsage.getStartTime()) ? standard : payForUsage
-            ));
-        }
-
-        if (standardActive.isPresent()) {
-            return Optional.of(reservationMapper.toDTO(standardActive.get()));
-        }
-
-        if (payForUsageActive.isPresent()) {
-            return Optional.of(reservationMapper.toDTO(payForUsageActive.get()));
-        }
+                userId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE);
+        if (payForUsageActive.isPresent()) return Optional.of(reservationMapper.toDTO(payForUsageActive.get()));
 
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true) //returns the most upcoming one
+    public Optional<ReservationDTO> findUpcomingReservation(String userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        OffsetDateTime now = OffsetDateTime.now();
+
+        List<Reservation> upcomingCandidates = new ArrayList<>();
+
+        // upcoming STANDARD PAID
+        reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
+                        userId, ReservationType.STANDARD, now, ReservationStatus.PAID)
+                .ifPresent(upcomingCandidates::add);
+
+        // upcoming DIRECT PAID
+        reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
+                        userId, ReservationType.DIRECT, now, ReservationStatus.PAID)
+                .ifPresent(upcomingCandidates::add);
+
+        // upcoming PAY_FOR_USAGE (PENDING_PAYMENT or ACTIVE)
+        reservationRepository.findFirstByUserIdAndReservationTypeInAndStartTimeAfterAndStatusInOrderByStartTimeAsc(
+                        userId,
+                        List.of(ReservationType.PAY_FOR_USAGE),
+                        now,
+                        List.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.ACTIVE))
+                .ifPresent(upcomingCandidates::add);
+
+        if (upcomingCandidates.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return upcomingCandidates.stream()
+                .min(Comparator.comparing(Reservation::getStartTime))
+                .map(reservationMapper::toDTO);
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReservationDTO> findUpcomingReservation(String userId) {
-        User user = userRepository.findById(userId)
+    public boolean hasActiveOrUpcomingReservationForLot(String userId, String parkingLotId, int upcomingWindowHours) { // Added upcomingWindowHours
+        userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found: " + parkingLotId));
 
         OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime upcomingWindowEnd = now.plusHours(upcomingWindowHours); // Used parameter
 
-        Optional<Reservation> standardUpcoming = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
-                userId,
-                ReservationType.STANDARD,
-                now,
-                ReservationStatus.PAID
-        );
-
-        Optional<Reservation> payForUsageUpcoming = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
-                userId,
-                ReservationType.PAY_FOR_USAGE,
-                now,
-                ReservationStatus.ACTIVE
-        );
-
-        if (standardUpcoming.isPresent() && payForUsageUpcoming.isPresent()) {
-            Reservation standard = standardUpcoming.get();
-            Reservation payForUsage = payForUsageUpcoming.get();
-
-            return Optional.of(reservationMapper.toDTO(
-                    standard.getStartTime().isBefore(payForUsage.getStartTime()) ? standard : payForUsage
-            ));
+        // active PAID Standard reservations
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
+                userId, parkingLotId, ReservationType.STANDARD, now, now, ReservationStatus.PAID)) {
+            return true;
         }
 
-        if (standardUpcoming.isPresent()) {
-            return Optional.of(reservationMapper.toDTO(standardUpcoming.get()));
+        // active PAID DIRECT reservations
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
+                userId, parkingLotId, ReservationType.DIRECT, now, now, ReservationStatus.PAID)) {
+            return true;
         }
 
-        if (payForUsageUpcoming.isPresent()) {
-            return Optional.of(reservationMapper.toDTO(payForUsageUpcoming.get()));
+        // active PAY_FOR_USAGE
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatus(
+                userId, parkingLotId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE)) {
+            return true;
         }
 
-        return Optional.empty();
+        // upcoming PAID Standard reservations within the window
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
+                userId, parkingLotId, ReservationType.STANDARD, now, upcomingWindowEnd, ReservationStatus.PAID)) {
+            return true;
+        }
+
+        // upcoming PAID DIRECT reservations within the window
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
+                userId, parkingLotId, ReservationType.DIRECT, now, upcomingWindowEnd, ReservationStatus.PAID)) {
+            return true;
+        }
+
+        // upcoming PAY_FOR_USAGE reservations with status ACTIVE, within the window
+        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
+                userId, parkingLotId, List.of(ReservationType.PAY_FOR_USAGE), now, upcomingWindowEnd, List.of(ReservationStatus.ACTIVE))) {
+            return true;
+        }
+
+        return false;
     }
+
 
     @Transactional
     public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, Double totalAmount) {

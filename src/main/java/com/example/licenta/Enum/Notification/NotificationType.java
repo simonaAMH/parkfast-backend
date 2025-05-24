@@ -5,8 +5,13 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 
 public enum NotificationType  {
 
-        PARKING_SPOT_AVAILABLE("parking-spot-available"),
-        RESERVATION_UPDATE("reservation-update");
+        AVAILABLE_SPOTS_NEARBY("available-spots-nearby"),
+        RESERVATION_UPDATE("reservation-update"),
+        PROMPT_START_RESERVATION("prompt-start-reservation"),
+        PROMPT_END_RESERVATION("prompt-end-reservation"),
+        CONTRIBUTE_PARKING_LOT_INFO("contribute-parking-lot-info"),
+        REVIEW_REMINDER("review-reminder"),
+        GENERAL_INFO("general-info");
 
         private final String value;
 

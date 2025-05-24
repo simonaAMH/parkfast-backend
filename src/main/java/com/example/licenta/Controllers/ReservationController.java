@@ -161,6 +161,23 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/user/{userId}/parking-lot/{parkingLotId}/has-relevant")
+    public ResponseEntity<ApiResponse<Map<String, Boolean>>> hasActiveOrUpcomingReservationForLot(
+            @PathVariable String userId,
+            @PathVariable String parkingLotId,
+            @RequestParam(defaultValue = "1") int upcomingWindowHours) {
+        boolean hasReservation = reservationService.hasActiveOrUpcomingReservationForLot(userId, parkingLotId, upcomingWindowHours);
+        Map<String, Boolean> responseData = new HashMap<>();
+        responseData.put("response", hasReservation);
+        ApiResponse<Map<String, Boolean>> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Checked for active or upcoming reservation in the specified lot.",
+                responseData
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{id}/end")
     public ResponseEntity<ApiResponse<ReservationDTO>> endActiveReservation(
             @PathVariable String id,
