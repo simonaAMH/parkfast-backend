@@ -269,6 +269,10 @@ public class ReservationService {
 
         OffsetDateTime now = OffsetDateTime.now();
 
+        Optional<Reservation> payForUsageActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatusOrderByStartTimeDesc(
+                userId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE);
+        if (payForUsageActive.isPresent()) return Optional.of(reservationMapper.toDTO(payForUsageActive.get()));
+
         Optional<Reservation> standardActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
                 userId, ReservationType.STANDARD, now, now, ReservationStatus.PAID);
         if (standardActive.isPresent()) return Optional.of(reservationMapper.toDTO(standardActive.get()));
@@ -276,10 +280,6 @@ public class ReservationService {
         Optional<Reservation> directActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
                 userId, ReservationType.DIRECT, now, now, ReservationStatus.PAID);
         if (directActive.isPresent()) return Optional.of(reservationMapper.toDTO(directActive.get()));
-
-        Optional<Reservation> payForUsageActive = reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatusOrderByStartTimeDesc(
-                userId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE);
-        if (payForUsageActive.isPresent()) return Optional.of(reservationMapper.toDTO(payForUsageActive.get()));
 
         return Optional.empty();
     }
@@ -292,6 +292,14 @@ public class ReservationService {
 
         List<Reservation> upcomingCandidates = new ArrayList<>();
 
+        // upcoming PAY_FOR_USAGE ACTIVE
+        reservationRepository.findFirstByUserIdAndReservationTypeInAndStartTimeAfterAndStatusInOrderByStartTimeAsc(
+                        userId,
+                        List.of(ReservationType.PAY_FOR_USAGE),
+                        now,
+                        List.of(ReservationStatus.ACTIVE))
+                .ifPresent(upcomingCandidates::add);
+
         // upcoming STANDARD PAID
         reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
                         userId, ReservationType.STANDARD, now, ReservationStatus.PAID)
@@ -300,14 +308,6 @@ public class ReservationService {
         // upcoming DIRECT PAID
         reservationRepository.findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
                         userId, ReservationType.DIRECT, now, ReservationStatus.PAID)
-                .ifPresent(upcomingCandidates::add);
-
-        // upcoming PAY_FOR_USAGE (PENDING_PAYMENT or ACTIVE)
-        reservationRepository.findFirstByUserIdAndReservationTypeInAndStartTimeAfterAndStatusInOrderByStartTimeAsc(
-                        userId,
-                        List.of(ReservationType.PAY_FOR_USAGE),
-                        now,
-                        List.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.ACTIVE))
                 .ifPresent(upcomingCandidates::add);
 
         if (upcomingCandidates.isEmpty()) {
@@ -367,7 +367,6 @@ public class ReservationService {
 
         return false;
     }
-
 
     @Transactional
     public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, Double totalAmount) {
