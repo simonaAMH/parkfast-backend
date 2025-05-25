@@ -26,15 +26,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatusOrderByStartTimeDesc(
             String userId, ReservationType type, OffsetDateTime now, ReservationStatus status);
 
-    // For findUpcomingReservation (WITH WINDOW )
-    Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatusOrderByStartTimeAsc(
-            String userId, ReservationType type, OffsetDateTime startTimeAfter, OffsetDateTime startTimeBefore, ReservationStatus status
-    );
-
-    Optional<Reservation> findFirstByUserIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusInOrderByStartTimeAsc(
-            String userId, Collection<ReservationType> types, OffsetDateTime startTimeAfter, OffsetDateTime startTimeBefore, Collection<ReservationStatus> statuses
-    );
-
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeAfterAndStatusOrderByStartTimeAsc(
             String userId, ReservationType type, OffsetDateTime startTimeAfter, ReservationStatus status
     );
@@ -43,21 +34,19 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
             String userId, Collection<ReservationType> types, OffsetDateTime startTimeAfter, Collection<ReservationStatus> statuses
     );
 
-
-    boolean existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
+    List<Reservation> findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
             String userId, String parkingLotId, ReservationType reservationType,
-            OffsetDateTime now1, OffsetDateTime now2, ReservationStatus status);
+            OffsetDateTime startTimeCriteria, OffsetDateTime endTimeCriteria, ReservationStatus status);
 
-    boolean existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatus(
+    List<Reservation> findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatus(
             String userId, String parkingLotId, ReservationType reservationType,
-            OffsetDateTime now, ReservationStatus status);
+            OffsetDateTime startTimeCriteria, ReservationStatus status);
 
-    boolean existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
+    List<Reservation> findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
             String userId, String parkingLotId, ReservationType reservationType,
-            OffsetDateTime windowStart, OffsetDateTime windowEnd, ReservationStatus status);
+            OffsetDateTime startTimeAfterCriteria, OffsetDateTime startTimeBeforeCriteria, ReservationStatus status);
 
-    boolean existsByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
-            String userId, String parkingLotId, Collection<ReservationType> types,
-            OffsetDateTime windowStart, OffsetDateTime windowEnd, Collection<ReservationStatus> statuses);
-
+    List<Reservation> findAllByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
+            String userId, String parkingLotId, List<ReservationType> reservationTypes,
+            OffsetDateTime startTimeAfterCriteria, OffsetDateTime startTimeBeforeCriteria, List<ReservationStatus> statuses);
 }

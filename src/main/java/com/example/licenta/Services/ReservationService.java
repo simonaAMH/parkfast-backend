@@ -320,52 +320,56 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasActiveOrUpcomingReservationForLot(String userId, String parkingLotId, int upcomingWindowHours) { // Added upcomingWindowHours
+    public List<ReservationDTO> findActiveOrUpcomingReservationsForLot(String userId, String parkingLotId, int upcomingWindowHours) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
         parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found: " + parkingLotId));
 
         OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime upcomingWindowEnd = now.plusHours(upcomingWindowHours); // Used parameter
+        OffsetDateTime upcomingWindowEnd = now.plusHours(upcomingWindowHours);
 
-        // active PAID Standard reservations
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
-                userId, parkingLotId, ReservationType.STANDARD, now, now, ReservationStatus.PAID)) {
-            return true;
-        }
+        Set<Reservation> relevantReservations = new HashSet<>();
 
-        // active PAID DIRECT reservations
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
-                userId, parkingLotId, ReservationType.DIRECT, now, now, ReservationStatus.PAID)) {
-            return true;
-        }
+        // Active PAID Standard reservations
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
+                        userId, parkingLotId, ReservationType.STANDARD, now, now, ReservationStatus.PAID)
+        );
 
-        // active PAY_FOR_USAGE
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatus(
-                userId, parkingLotId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE)) {
-            return true;
-        }
+        // Active PAID DIRECT reservations
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatus(
+                        userId, parkingLotId, ReservationType.DIRECT, now, now, ReservationStatus.PAID)
+        );
 
-        // upcoming PAID Standard reservations within the window
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
-                userId, parkingLotId, ReservationType.STANDARD, now, upcomingWindowEnd, ReservationStatus.PAID)) {
-            return true;
-        }
+        // Active PAY_FOR_USAGE
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeBeforeAndEndTimeIsNullAndStatus(
+                        userId, parkingLotId, ReservationType.PAY_FOR_USAGE, now, ReservationStatus.ACTIVE)
+        );
 
-        // upcoming PAID DIRECT reservations within the window
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
-                userId, parkingLotId, ReservationType.DIRECT, now, upcomingWindowEnd, ReservationStatus.PAID)) {
-            return true;
-        }
+        // Upcoming PAID Standard reservations within the window
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
+                        userId, parkingLotId, ReservationType.STANDARD, now, upcomingWindowEnd, ReservationStatus.PAID)
+        );
 
-        // upcoming PAY_FOR_USAGE reservations with status ACTIVE, within the window
-        if (reservationRepository.existsByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
-                userId, parkingLotId, List.of(ReservationType.PAY_FOR_USAGE), now, upcomingWindowEnd, List.of(ReservationStatus.ACTIVE))) {
-            return true;
-        }
+        // Upcoming PAID DIRECT reservations within the window
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeAndStartTimeAfterAndStartTimeBeforeAndStatus(
+                        userId, parkingLotId, ReservationType.DIRECT, now, upcomingWindowEnd, ReservationStatus.PAID)
+        );
 
-        return false;
+        // Upcoming PAY_FOR_USAGE reservations with status ACTIVE, within the window
+        relevantReservations.addAll(
+                reservationRepository.findAllByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
+                        userId, parkingLotId, List.of(ReservationType.PAY_FOR_USAGE), now, upcomingWindowEnd, List.of(ReservationStatus.ACTIVE))
+        );
+
+        return relevantReservations.stream()
+                .map(reservationMapper::toDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional
