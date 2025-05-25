@@ -33,7 +33,7 @@ public class UserUpdateDTO {
 
     private String profileImage;
 
-    private Integer loyaltyPoints;
+    private Double loyaltyPoints;
 
     @Enumerated(EnumType.STRING)
     private Role role;

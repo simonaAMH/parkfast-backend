@@ -276,7 +276,7 @@ public class UserController {
     @PutMapping("/{userId}/use-points")
     public ResponseEntity<ApiResponse<UserDTO>> useLoyaltyPoints(
             @PathVariable String userId,
-            @RequestParam @Min(value = 1, message = "Points to use must be at least 1") int points) {
+            @RequestParam @Min(value = 1, message = "Points to use must be at least 1") Double points) {
 
         if (userId == null || userId.isEmpty()) {
             throw new InvalidDataException("Valid user ID is required");

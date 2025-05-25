@@ -19,7 +19,7 @@ public class UserDTO {
     private Double totalEarnings;
     private Double paidEarnings;
     private Role role;
-    private Integer loyaltyPoints;
+    private Double loyaltyPoints;
     private boolean emailVerified;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

@@ -243,7 +243,7 @@ public class UserService {
     }
 
     @Transactional
-    public User useLoyaltyPoints(String userId, int pointsToUse) {
+    public User useLoyaltyPoints(String userId, Double pointsToUse) {
         if (pointsToUse <= 0) {
             throw new InvalidDataException("Points to use must be positive.");
         }
@@ -255,7 +255,7 @@ public class UserService {
             throw new InvalidDataException("Insufficient loyalty points. Available: " + user.getLoyaltyPoints());
         }
 
-        int newPointsBalance = user.getLoyaltyPoints() - pointsToUse;
+        Double newPointsBalance = user.getLoyaltyPoints() - pointsToUse;
         user.setLoyaltyPoints(newPointsBalance);
         user.setUpdatedAt(OffsetDateTime.now());
 

@@ -48,7 +48,7 @@ public class User {
     private Role role = Role.USER;
 
     @Column(name = "loyalty_points")
-    private Integer loyaltyPoints = 0;
+    private Double loyaltyPoints = 0.0;
 
     @Column(name = "email_verification_token")
     private String emailVerificationToken;

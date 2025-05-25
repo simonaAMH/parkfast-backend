@@ -487,6 +487,20 @@ public class ReservationService {
                 System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded.");
             }
 
+            if (user != null && amountPaid.compareTo(0.0) > 0) {
+                double pointsToAddUnrounded = amountPaid * 0.05;
+
+                BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
+                        .setScale(2, RoundingMode.HALF_UP);
+                Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
+
+                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+
+                user.setLoyaltyPoints(currentLoyaltyPoints + pointsToAdd);
+                userRepository.save(user);
+                System.out.println("Awarded " + pointsToAdd + " loyalty points to user " + user.getId() + ". New total: " + user.getLoyaltyPoints());
+            }
+
             Reservation updatedReservation = reservationRepository.save(reservation);
 
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
