@@ -421,8 +421,8 @@ public class ReservationService {
             throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
         }
 
-        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") is not in PENDING_PAYMENT status. Current status: " + reservation.getStatus());
+        if (reservation.getStatus() != ReservationStatus.PAYMENT_FAILED && reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status. Current status: " + reservation.getStatus());
         }
 
         User user = reservation.getUser();
