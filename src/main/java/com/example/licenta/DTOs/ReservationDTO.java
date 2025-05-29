@@ -23,7 +23,7 @@ public class ReservationDTO {
     private Double finalAmount;
     private ReservationType reservationType;
     private ReservationStatus status;
-    private Review review;
+    private String reviewId;
     private boolean hasCheckedIn;
     private boolean hasCheckedOut;
     private String activeQrToken;

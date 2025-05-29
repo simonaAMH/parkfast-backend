@@ -4,9 +4,6 @@ import com.example.licenta.DTOs.ReservationDTO;
 import com.example.licenta.Models.Reservation;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 @Service
 public class ReservationMapper {
 
@@ -23,6 +20,9 @@ public class ReservationMapper {
         if (reservation.getUser() != null) {
             dto.setUserId(reservation.getUser().getId());
         }
+        if (reservation.getReview() != null) {
+            dto.setReviewId(reservation.getReview().getId());
+        }
         dto.setStartTime(reservation.getStartTime());
         dto.setEndTime(reservation.getEndTime());
         dto.setVehiclePlate(reservation.getVehiclePlate());
@@ -36,18 +36,11 @@ public class ReservationMapper {
         dto.setStatus(reservation.getStatus());
         dto.setActiveQrToken(reservation.getActiveQrToken());
         dto.setQrTokenExpiry(reservation.getQrTokenExpiry());
-        dto.setReview(reservation.getReview());
         dto.setHasCheckedIn(reservation.isHasCheckedIn());
         dto.setHasCheckedOut(reservation.isHasCheckedOut());
         dto.setCreatedAt(reservation.getCreatedAt());
         dto.setUpdatedAt(reservation.getUpdatedAt());
 
         return dto;
-    }
-
-    public List<ReservationDTO> toDTOList(List<Reservation> reservations) {
-        return reservations.stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
     }
 }
