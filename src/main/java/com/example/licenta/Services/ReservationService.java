@@ -1,9 +1,6 @@
 package com.example.licenta.Services;
 
-import com.example.licenta.DTOs.CreateReservationDTO;
-import com.example.licenta.DTOs.CreateReviewDTO;
-import com.example.licenta.DTOs.ReservationDTO;
-import com.example.licenta.DTOs.ReviewDTO;
+import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
@@ -26,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -666,5 +665,37 @@ public class ReservationService {
             parkingLot.setAverageRating(roundedAverage.doubleValue());
         }
         parkingLotRepository.save(parkingLot);
+    }
+
+    @Transactional
+    public QrTokenResponseDTO generateActiveQrToken(String reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
+
+        if (!(reservation.getStatus() == ReservationStatus.PAID ||
+                reservation.getStatus() == ReservationStatus.ACTIVE)) {
+            throw new InvalidDataException("Cannot generate QR token for reservation " + reservationId +
+                    " with status: " + reservation.getStatus() + ". Expected PAID or ACTIVE.");
+        }
+
+        if (reservation.isHasCheckedIn() && reservation.isHasCheckedOut()) {
+            throw new InvalidDataException("Reservation " + reservationId + " is already completed. Cannot generate new QR token.");
+        }
+
+        String newActiveQrToken = UUID.randomUUID().toString();
+        OffsetDateTime newQrTokenExpiry = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(10);
+
+        reservation.setActiveQrToken(newActiveQrToken);
+        reservation.setQrTokenExpiry(newQrTokenExpiry);
+        reservationRepository.save(reservation);
+
+        String qrCodePayload = reservation.getId() + ":" + newActiveQrToken;
+
+        return QrTokenResponseDTO.builder()
+                .reservationId(reservation.getId())
+                .activeQrToken(newActiveQrToken)
+                .qrTokenExpiry(newQrTokenExpiry)
+                .qrCodePayload(qrCodePayload)
+                .build();
     }
 }

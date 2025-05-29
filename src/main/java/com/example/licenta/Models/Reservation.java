@@ -31,6 +31,18 @@ public class Reservation {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Column(name = "has_checked_in", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean hasCheckedIn = false;
+
+    @Column(name = "has_checked_out", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean hasCheckedOut = false;
+
+    @Column(name = "active_qr_token", length = 255)
+    private String activeQrToken;
+
+    @Column(name = "qr_token_expiry")
+    private OffsetDateTime qrTokenExpiry;
+
     @NotNull
     @Column(name = "start_time", nullable = false)
     private OffsetDateTime startTime;
@@ -71,9 +83,6 @@ public class Reservation {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ReservationStatus status = ReservationStatus.PENDING_PAYMENT;
-
-    @Column(name = "qr_code_data", length = 500)
-    private String qrCodeData;
 
     @OneToOne(mappedBy = "reservation", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Review review;

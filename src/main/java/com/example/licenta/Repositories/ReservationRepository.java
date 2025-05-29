@@ -49,4 +49,28 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     List<Reservation> findAllByUserIdAndParkingLotIdAndReservationTypeInAndStartTimeAfterAndStartTimeBeforeAndStatusIn(
             String userId, String parkingLotId, List<ReservationType> reservationTypes,
             OffsetDateTime startTimeAfterCriteria, OffsetDateTime startTimeBeforeCriteria, List<ReservationStatus> statuses);
+
+    Optional<Reservation> findByIdAndActiveQrToken(String reservationId, String activeQrToken);
+
+    Optional<Reservation> findTopByUserIdAndParkingLotIdAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String userId, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    Optional<Reservation> findTopByUserIdAndParkingLotIdAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String userId, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    // barrier entry - User
+    Optional<Reservation> findTopByVehiclePlateAndParkingLotIdAndUserIsNotNullAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String vehiclePlate, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    // barrier entry - Guest
+    Optional<Reservation> findTopByVehiclePlateAndParkingLotIdAndUserIsNullAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String vehiclePlate, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    // barrier exit - User
+    Optional<Reservation> findTopByVehiclePlateAndParkingLotIdAndUserIsNotNullAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String vehiclePlate, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    // barrier exit - Guest
+    Optional<Reservation> findTopByVehiclePlateAndParkingLotIdAndUserIsNullAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String vehiclePlate, String parkingLotId, List<ReservationStatus> validStatuses);
 }

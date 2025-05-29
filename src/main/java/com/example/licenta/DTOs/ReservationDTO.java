@@ -2,6 +2,7 @@ package com.example.licenta.DTOs;
 
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.Models.Review;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
@@ -10,9 +11,7 @@ import java.time.OffsetDateTime;
 public class ReservationDTO {
     private String id;
     private String parkingLotId;
-    private String parkingLotName;
     private String userId;
-    private String username;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;
     private String vehiclePlate;
@@ -24,7 +23,11 @@ public class ReservationDTO {
     private Double finalAmount;
     private ReservationType reservationType;
     private ReservationStatus status;
-    private String qrCodeData;
+    private Review review;
+    private boolean hasCheckedIn;
+    private boolean hasCheckedOut;
+    private String activeQrToken;
+    private OffsetDateTime qrTokenExpiry;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

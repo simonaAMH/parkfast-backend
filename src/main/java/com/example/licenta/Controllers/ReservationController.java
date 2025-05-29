@@ -242,4 +242,16 @@ public class ReservationController {
         ApiResponse<Void> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Review deleted successfully", null);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/{reservationId}/generate-qr-token")
+    public ResponseEntity<ApiResponse<QrTokenResponseDTO>> generateQrTokenForReservation(@PathVariable String reservationId) {
+        QrTokenResponseDTO qrTokenResponse = reservationService.generateActiveQrToken(reservationId);
+        ApiResponse<QrTokenResponseDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "QR token generated successfully.",
+                qrTokenResponse
+        );
+        return ResponseEntity.ok(response);
+    }
 }

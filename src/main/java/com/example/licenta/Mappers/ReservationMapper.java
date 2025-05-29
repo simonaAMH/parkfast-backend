@@ -19,11 +19,9 @@ public class ReservationMapper {
         dto.setId(reservation.getId());
         if (reservation.getParkingLot() != null) {
             dto.setParkingLotId(reservation.getParkingLot().getId());
-            dto.setParkingLotName(reservation.getParkingLot().getName());
         }
         if (reservation.getUser() != null) {
             dto.setUserId(reservation.getUser().getId());
-            dto.setUsername(reservation.getUser().getUsername());
         }
         dto.setStartTime(reservation.getStartTime());
         dto.setEndTime(reservation.getEndTime());
@@ -36,7 +34,11 @@ public class ReservationMapper {
         dto.setFinalAmount(reservation.getFinalAmount());
         dto.setReservationType(reservation.getReservationType());
         dto.setStatus(reservation.getStatus());
-        dto.setQrCodeData(reservation.getQrCodeData());
+        dto.setActiveQrToken(reservation.getActiveQrToken());
+        dto.setQrTokenExpiry(reservation.getQrTokenExpiry());
+        dto.setReview(reservation.getReview());
+        dto.setHasCheckedIn(reservation.isHasCheckedIn());
+        dto.setHasCheckedOut(reservation.isHasCheckedOut());
         dto.setCreatedAt(reservation.getCreatedAt());
         dto.setUpdatedAt(reservation.getUpdatedAt());
 
