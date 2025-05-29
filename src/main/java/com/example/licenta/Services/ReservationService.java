@@ -21,6 +21,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -231,6 +232,37 @@ public class ReservationService {
             reservationPage = reservationRepository.findByUserId(userId, pageable);
         } else {
             reservationPage = reservationRepository.findByUserIdAndReservationTypeIn(userId, types, pageable);
+        }
+
+        List<ReservationDTO> dtoList = reservationPage.getContent().stream()
+                .map(reservationMapper::toDTO)
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(dtoList, pageable, reservationPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReservationDTO> getReservationsForParkingLotByPeriod(
+            String parkingLotId,
+            String period,
+            Pageable pageable) {
+
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found: " + parkingLotId));
+
+        Page<Reservation> reservationPage;
+        OffsetDateTime now = OffsetDateTime.now();
+
+        if ("ACTIVE".equalsIgnoreCase(period)) {
+            reservationPage = reservationRepository.findActiveReservationsForParkingLot(parkingLotId, now, pageable);
+        } else if ("UPCOMING".equalsIgnoreCase(period)) {
+            reservationPage = reservationRepository.findUpcomingReservationsForParkingLot(parkingLotId, now, pageable);
+        } else if ("ENDED".equalsIgnoreCase(period)) {
+            reservationPage = reservationRepository.findEndedReservationsForParkingLot(parkingLotId, now, pageable);
+        } else if ("ALL".equalsIgnoreCase(period) || !StringUtils.hasText(period)) {
+            reservationPage = reservationRepository.findByParkingLotId(parkingLotId, pageable);
+        } else {
+            reservationPage = reservationRepository.findByParkingLotId(parkingLotId, pageable);
         }
 
         List<ReservationDTO> dtoList = reservationPage.getContent().stream()

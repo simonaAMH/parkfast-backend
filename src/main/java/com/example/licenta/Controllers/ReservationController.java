@@ -83,6 +83,38 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/parking-lot/{parkingLotId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getReservationsByParkingLot(
+            @PathVariable String parkingLotId,
+            @RequestParam(required = false) String period,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Sort sort;
+        if ("ENDED".equalsIgnoreCase(period)) {
+            sort = Sort.by(Sort.Order.desc("endTime"));
+        } else {
+            sort = Sort.by(Sort.Order.desc("startTime"));
+        }
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<ReservationDTO> reservationPage = reservationService.getReservationsForParkingLotByPeriod(parkingLotId, period, pageable);
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("reservations", reservationPage.getContent());
+        responseData.put("currentPage", reservationPage.getNumber());
+        responseData.put("totalItems", reservationPage.getTotalElements());
+        responseData.put("totalPages", reservationPage.getTotalPages());
+
+        ApiResponse<Map<String, Object>> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Parking lot reservations retrieved successfully",
+                responseData
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<ReservationDTO>> updateReservationStatus(
             @PathVariable String id,

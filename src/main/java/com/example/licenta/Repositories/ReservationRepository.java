@@ -8,12 +8,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+@Repository
 public interface ReservationRepository extends JpaRepository<Reservation, String> {
     Page<Reservation> findByUserId(String userId, Pageable pageable);
     Page<Reservation> findByUserIdAndReservationTypeIn(String userId, List<ReservationType> types, Pageable pageable);
@@ -73,4 +75,28 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     // barrier exit - Guest
     Optional<Reservation> findTopByVehiclePlateAndParkingLotIdAndUserIsNullAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
             String vehiclePlate, String parkingLotId, List<ReservationStatus> validStatuses);
+
+    // ALL
+    Page<Reservation> findByParkingLotId(String parkingLotId, Pageable pageable);
+
+    // "ACTIVE" reservations for a specific parking lot
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND (" +
+            "(r.reservationType = com.example.licenta.Enum.Reservation.ReservationType.PAY_FOR_USAGE AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.ACTIVE AND r.endTime IS NULL) OR " +
+            "(r.reservationType IN (com.example.licenta.Enum.Reservation.ReservationType.STANDARD, com.example.licenta.Enum.Reservation.ReservationType.DIRECT) AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.startTime <= :now AND r.endTime >= :now)" +
+            ")")
+    Page<Reservation> findActiveReservationsForParkingLot(@Param("parkingLotId") String parkingLotId, @Param("now") OffsetDateTime now, Pageable pageable);
+
+    // "UPCOMING" reservations for a specific parking lot
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.startTime > :now AND (" +
+            "r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID OR " +
+            "(r.status = com.example.licenta.Enum.Reservation.ReservationStatus.ACTIVE AND r.reservationType = com.example.licenta.Enum.Reservation.ReservationType.PAY_FOR_USAGE)" +
+            ")")
+    Page<Reservation> findUpcomingReservationsForParkingLot(@Param("parkingLotId") String parkingLotId, @Param("now") OffsetDateTime now, Pageable pageable);
+
+    // "ENDED" reservations for a specific parking lot
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND (" +
+            "(r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime < :now) OR " +
+            "r.status IN (com.example.licenta.Enum.Reservation.ReservationStatus.CANCELLED, com.example.licenta.Enum.Reservation.ReservationStatus.PAYMENT_FAILED)" +
+            ")")
+    Page<Reservation> findEndedReservationsForParkingLot(@Param("parkingLotId") String parkingLotId, @Param("now") OffsetDateTime now, Pageable pageable);
 }
