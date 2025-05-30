@@ -118,12 +118,10 @@ public class ReservationController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<ReservationDTO>> updateReservationStatus(
             @PathVariable String id,
-            @RequestParam ReservationStatus status,
-            @RequestParam(required = false) Double pointsUsed,
-            @RequestParam(required = false) Double finalAmount
+            @RequestParam ReservationStatus status
     ) {
 
-        ReservationDTO updatedReservation = reservationService.updateReservationStatus(id, status, pointsUsed, finalAmount);
+        ReservationDTO updatedReservation = reservationService.updateReservationStatus(id, status);
 
         ApiResponse<ReservationDTO> response = new ApiResponse<>(
                 true,

@@ -273,19 +273,11 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO updateReservationStatus(String reservationId, ReservationStatus newStatus, Double pointsUsed, Double finalAmount) {
+    public ReservationDTO updateReservationStatus(String reservationId, ReservationStatus newStatus) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
         reservation.setStatus(newStatus);
-
-        if (pointsUsed != null) {
-            reservation.setPointsUsed(pointsUsed);
-        }
-        if (finalAmount != null) {
-            reservation.setFinalAmount(finalAmount);
-        }
-
         Reservation updatedReservation = reservationRepository.save(reservation);
 
         return reservationMapper.toDTO(updatedReservation);
