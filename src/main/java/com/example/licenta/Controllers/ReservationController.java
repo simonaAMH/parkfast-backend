@@ -119,7 +119,7 @@ public class ReservationController {
     public ResponseEntity<ApiResponse<ReservationDTO>> updateReservationStatus(
             @PathVariable String id,
             @RequestParam ReservationStatus status,
-            @RequestParam(required = false) Integer pointsUsed,
+            @RequestParam(required = false) Double pointsUsed,
             @RequestParam(required = false) Double finalAmount
     ) {
 

@@ -32,7 +32,7 @@ public class CreateReservationDTO {
     @NotNull(message = "Total amount cannot be null")
     private Double totalAmount;
 
-    private Integer pointsUsed = 0;
+    private Double pointsUsed = 0.0;
 
     @NotNull(message = "Final amount cannot be null")
     private Double finalAmount;

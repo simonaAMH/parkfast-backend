@@ -19,7 +19,7 @@ public class ReservationDTO {
     private String guestEmail;
     private String guestName;
     private Double totalAmount;
-    private Integer pointsUsed;
+    private Double pointsUsed;
     private Double finalAmount;
     private ReservationType reservationType;
     private ReservationStatus status;

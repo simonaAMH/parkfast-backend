@@ -68,7 +68,7 @@ public class Reservation {
     private Double totalAmount;
 
     @Column(name = "points_used", nullable = false)
-    private Integer pointsUsed = 0;
+    private Double pointsUsed = 0.0;
 
     @NotNull
     @Column(name = "final_amount", nullable = false)
