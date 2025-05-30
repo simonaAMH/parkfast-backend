@@ -288,8 +288,6 @@ public class ReservationService {
 
         Reservation updatedReservation = reservationRepository.save(reservation);
 
-        // TODO: Add side effects based on status change (e.g., sending notifications)
-
         return reservationMapper.toDTO(updatedReservation);
     }
 
@@ -443,7 +441,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO handleSuccessfulPayment(String reservationId) {
+    public ReservationDTO handlePayment(String reservationId, PaymentRequestDTO paymentRequest) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -452,7 +450,7 @@ public class ReservationService {
             throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
         }
 
-        if (reservation.getStatus() != ReservationStatus.PAYMENT_FAILED && reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
+        if (reservation.getStatus() != ReservationStatus.PAYMENT_FAILED && reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
             throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status. Current status: " + reservation.getStatus());
         }
 
@@ -461,6 +459,15 @@ public class ReservationService {
                 user.getEmail() : reservation.getGuestEmail();
         String guestAccessTokenString = null;
 
+        Double pointsToUse = (paymentRequest != null) ? paymentRequest.getPointsToUse() : 0.0;
+        if (user != null && pointsToUse > 0) {
+            Double userCurrentPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+            if (userCurrentPoints < pointsToUse) {
+                throw new InvalidDataException("Insufficient loyalty points. Available: " + userCurrentPoints + ", Requested: " + pointsToUse);
+            }
+        }
+
+        //doar o activam
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             reservation.setStatus(ReservationStatus.ACTIVE);
 
@@ -482,48 +489,53 @@ public class ReservationService {
             }
             return reservationMapper.toDTO(updatedReservation);
 
-        } else {
-            if (reservation.getEndTime() == null && reservation.getReservationType() != ReservationType.PAY_FOR_USAGE) {
-                throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
-                        reservation.getReservationType() + " must have an end time for final payment processing.");
-            }
+            //daca nu are endtime si nu e tip pay for usage (adica activare) -> eroare
+        } else if (reservation.getReservationType() != ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
+                    reservation.getReservationType() + " must have an end time for final payment processing.");
 
+            //acum procesam doar daca are endTime (deci are un pret final, orice tip de rezervare
+        } else {
             if (user == null) {
                 OffsetDateTime tokenExpiry = null;
-                if (reservation.getEndTime() != null) {
-                    tokenExpiry = reservation.getEndTime().plusHours(1);
-                } else {
-                    tokenExpiry = OffsetDateTime.now().plusHours(1);
-                    System.err.println("Guest reservation " + reservationId + " of type " + reservation.getReservationType() + " has no endTime for token generation. Setting default expiry.");
-                }
+                tokenExpiry = reservation.getEndTime().plusHours(1);
                 GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, tokenExpiry);
                 guestAccessTokenString = guestToken.getToken();
             }
 
             User owner = parkingLot.getOwner();
-            Double amountPaid = reservation.getFinalAmount();
+            Double amountToPay = reservation.getTotalAmount();
+            Double finalAmount = amountToPay;
 
-            if (amountPaid == null) {
+            if (amountToPay == null || amountToPay < 0) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a final amount for payment processing.");
             }
-            if (amountPaid  < 0) {
-                throw new InvalidDataException("Reservation (ID: " + reservationId + ") final amount cannot be negative.");
+
+            if (pointsToUse > 0 && user != null) {
+                finalAmount = amountToPay - pointsToUse * 0.1;
+                if (finalAmount < 0) {
+                    finalAmount = 0.0;
+                }
+                Double currentLoyaltyPoints = Optional.of(user.getLoyaltyPoints()).orElse(0.0);
+                user.setLoyaltyPoints(currentLoyaltyPoints - pointsToUse);
+                userRepository.save(user);
             }
 
             reservation.setStatus(ReservationStatus.PAID);
+            reservation.setPointsUsed(pointsToUse);
+            reservation.setFinalAmount(finalAmount);
+            reservationRepository.save(reservation);
 
-            if (owner != null && amountPaid.compareTo(0.0) > 0) {
+            if (owner != null && finalAmount.compareTo(0.0) > 0) {
                 Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
                 Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
-                owner.setPendingEarnings(currentPendingEarnings + amountPaid);
-                owner.setTotalEarnings(currentTotalEarnings + amountPaid);
+                owner.setPendingEarnings(currentPendingEarnings + finalAmount);
+                owner.setTotalEarnings(currentTotalEarnings + finalAmount);
                 userRepository.save(owner);
-            } else if (owner == null && amountPaid.compareTo(0.0) > 0) {
-                System.err.println("Parking lot ID " + parkingLot.getId() + " for reservation ID " + reservationId + " does not have an owner. Earnings not recorded.");
             }
 
-            if (user != null && amountPaid.compareTo(0.0) > 0) {
-                double pointsToAddUnrounded = amountPaid * 0.05;
+            if (user != null && finalAmount.compareTo(0.0) > 0) {
+                double pointsToAddUnrounded = finalAmount * 0.05;
 
                 BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
                         .setScale(2, RoundingMode.HALF_UP);
@@ -533,7 +545,6 @@ public class ReservationService {
 
                 user.setLoyaltyPoints(currentLoyaltyPoints + pointsToAdd);
                 userRepository.save(user);
-                System.out.println("Awarded " + pointsToAdd + " loyalty points to user " + user.getId() + ". New total: " + user.getLoyaltyPoints());
             }
 
             Reservation updatedReservation = reservationRepository.save(reservation);
@@ -545,7 +556,7 @@ public class ReservationService {
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
                         updatedReservation.getEndTime(),
-                        amountPaid,
+                        finalAmount,
                         guestAccessTokenString
                 );
             }

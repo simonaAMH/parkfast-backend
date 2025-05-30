@@ -243,26 +243,6 @@ public class UserService {
     }
 
     @Transactional
-    public User useLoyaltyPoints(String userId, Double pointsToUse) {
-        if (pointsToUse <= 0) {
-            throw new InvalidDataException("Points to use must be positive.");
-        }
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
-
-        if (user.getLoyaltyPoints() < pointsToUse) {
-            throw new InvalidDataException("Insufficient loyalty points. Available: " + user.getLoyaltyPoints());
-        }
-
-        Double newPointsBalance = user.getLoyaltyPoints() - pointsToUse;
-        user.setLoyaltyPoints(newPointsBalance);
-        user.setUpdatedAt(OffsetDateTime.now());
-
-        return userRepository.save(user);
-    }
-
-    @Transactional
     public UserVehiclePlate addVehiclePlate(String userId, UserVehiclePlateDTO plateDto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));

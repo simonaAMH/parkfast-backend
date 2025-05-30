@@ -273,27 +273,6 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{userId}/use-points")
-    public ResponseEntity<ApiResponse<UserDTO>> useLoyaltyPoints(
-            @PathVariable String userId,
-            @RequestParam @Min(value = 0, message = "Points to use must be at least 0") Double points) {
-
-        if (userId == null || userId.isEmpty()) {
-            throw new InvalidDataException("Valid user ID is required");
-        }
-
-        User updatedUser = userService.useLoyaltyPoints(userId, points);
-        UserDTO userDto = convertToDto(updatedUser);
-
-        ApiResponse<UserDTO> response = new ApiResponse<>(
-                true,
-                HttpStatus.OK.value(),
-                points + " loyalty points used successfully.",
-                userDto
-        );
-        return ResponseEntity.ok(response);
-    }
-
     @PostMapping("/{userId}/vehicle-plates")
     public ResponseEntity<ApiResponse<UserVehiclePlateDTO>> addVehiclePlate(
             @PathVariable String userId,
