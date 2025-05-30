@@ -54,9 +54,19 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
 
     Optional<Reservation> findByIdAndActiveQrToken(String reservationId, String activeQrToken);
 
+    // Guest GPS Check-in
+    Optional<Reservation> findTopByUserIsNullAndDeviceIdentifierAndParkingLotIdAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String deviceIdentifier, String parkingLotId, List<ReservationStatus> statuses);
+
+    // Guest GPS Check-out
+    Optional<Reservation> findTopByUserIsNullAndDeviceIdentifierAndParkingLotIdAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+            String deviceIdentifier, String parkingLotId, List<ReservationStatus> statuses);
+
+    // User GPS Check-in
     Optional<Reservation> findTopByUserIdAndParkingLotIdAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
             String userId, String parkingLotId, List<ReservationStatus> validStatuses);
 
+    // User GPS Check-out
     Optional<Reservation> findTopByUserIdAndParkingLotIdAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
             String userId, String parkingLotId, List<ReservationStatus> validStatuses);
 

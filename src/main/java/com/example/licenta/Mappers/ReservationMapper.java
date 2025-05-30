@@ -23,6 +23,7 @@ public class ReservationMapper {
         if (reservation.getReview() != null) {
             dto.setReviewId(reservation.getReview().getId());
         }
+        dto.setDeviceIdentifier(reservation.getDeviceIdentifier());
         dto.setStartTime(reservation.getStartTime());
         dto.setEndTime(reservation.getEndTime());
         dto.setVehiclePlate(reservation.getVehiclePlate());

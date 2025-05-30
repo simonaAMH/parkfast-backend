@@ -24,6 +24,7 @@ public class ReservationDTO {
     private ReservationType reservationType;
     private ReservationStatus status;
     private String reviewId;
+    private String deviceIdentifier;
     private boolean hasCheckedIn;
     private boolean hasCheckedOut;
     private String activeQrToken;

@@ -31,6 +31,9 @@ public class Reservation {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Column(name = "device_identifier")
+    private String deviceIdentifier;
+
     @Column(name = "has_checked_in", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean hasCheckedIn = false;
 

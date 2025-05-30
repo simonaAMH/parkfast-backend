@@ -30,15 +30,15 @@ public class ParkingLotAccessController {
         return ResponseEntity.ok(response);
     }
 
-//    @PostMapping("/gps-checkin-guest")
-//    public ResponseEntity<ApiResponse<Object>> gpsCheckInGuest(
-//            @RequestParam String parkingLotId,
-//            @RequestParam String deviceIdentifier) {
-//        parkingLotAccessService.gpsCheckInGuest(deviceIdentifier, parkingLotId);
-//        ApiResponse<Object> response = new ApiResponse<>(true, HttpStatus.OK.value(),
-//                String.format("Guest with deviceIdentifier: %s GPS check-in successful for parking lot %s.", deviceIdentifier, parkingLotId), null);
-//        return ResponseEntity.ok(response);
-//    }
+    @PostMapping("/gps-checkin-guest")
+    public ResponseEntity<ApiResponse<Object>> gpsCheckInGuest(
+            @RequestParam String parkingLotId,
+            @RequestParam String deviceIdentifier) {
+        parkingLotAccessService.gpsCheckInGuest(deviceIdentifier, parkingLotId);
+        ApiResponse<Object> response = new ApiResponse<>(true, HttpStatus.OK.value(),
+                String.format("Guest with deviceIdentifier: %s GPS check-in successful for parking lot %s.", deviceIdentifier, parkingLotId), null);
+        return ResponseEntity.ok(response);
+    }
 
     // 1. GPS Automated Check-out
     @PostMapping("/gps-checkout-user")
@@ -51,15 +51,15 @@ public class ParkingLotAccessController {
         return ResponseEntity.ok(response);
     }
 
-//    @PostMapping("/gps-checkout-guest")
-//    public ResponseEntity<ApiResponse<Object>> gpsCheckOutGuest(
-//            @RequestParam String parkingLotId,
-//            @Nullable @RequestParam String deviceIdentifier) {
-//        parkingLotAccessService.gpsCheckOutGuest(deviceIdentifier, parkingLotId);
-//        ApiResponse<Object> response = new ApiResponse<>(true, HttpStatus.OK.value(),
-//                String.format("Guest with deviceIdentifier: %s GPS check-out successful from parking lot %s.", deviceIdentifier, parkingLotId), null);
-//        return ResponseEntity.ok(response);
-//    }
+    @PostMapping("/gps-checkout-guest")
+    public ResponseEntity<ApiResponse<Object>> gpsCheckOutGuest(
+            @RequestParam String parkingLotId,
+            @Nullable @RequestParam String deviceIdentifier) {
+        parkingLotAccessService.gpsCheckOutGuest(deviceIdentifier, parkingLotId);
+        ApiResponse<Object> response = new ApiResponse<>(true, HttpStatus.OK.value(),
+                String.format("Guest with deviceIdentifier: %s GPS check-out successful from parking lot %s.", deviceIdentifier, parkingLotId), null);
+        return ResponseEntity.ok(response);
+    }
 
     // 2. QR Scan
     @PostMapping("/qr-scan/{qrCodeData}")

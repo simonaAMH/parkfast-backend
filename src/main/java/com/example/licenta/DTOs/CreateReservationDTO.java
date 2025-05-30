@@ -14,6 +14,8 @@ public class CreateReservationDTO {
 
     private String userId;
 
+    private String deviceIdentifier;
+
     @NotBlank(message = "Start time cannot be blank")
     private String startTime;
 

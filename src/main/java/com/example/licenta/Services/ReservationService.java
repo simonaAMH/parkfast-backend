@@ -101,6 +101,7 @@ public class ReservationService {
         Reservation reservation = new Reservation();
         reservation.setParkingLot(parkingLot);
         reservation.setUser(user);
+        reservation.setDeviceIdentifier(dto.getDeviceIdentifier());
         reservation.setStartTime(startTime);
         reservation.setEndTime(endTime);
         reservation.setVehiclePlate(dto.getVehiclePlate());

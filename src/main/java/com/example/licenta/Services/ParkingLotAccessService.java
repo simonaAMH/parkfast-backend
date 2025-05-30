@@ -73,6 +73,31 @@ public class ParkingLotAccessService {
         reservationRepository.save(reservationToProcess);
     }
 
+
+    @Transactional
+    public void gpsCheckInGuest(String deviceIdentifier, String parkingLotId) {
+         ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+         .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found: " + parkingLotId));
+
+        List<ReservationStatus> eligibleStatuses = List.of(ReservationStatus.PAID, ReservationStatus.ACTIVE);
+
+        Reservation reservationToProcess = reservationRepository
+                .findTopByUserIsNullAndDeviceIdentifierAndParkingLotIdAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+                        deviceIdentifier, parkingLotId, eligibleStatuses)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Guest (Device: " + deviceIdentifier + "): No eligible reservation found at parking lot " + parkingLotId +
+                                ". Reservation must be PAID or ACTIVE and not yet checked in."));
+
+        if (reservationToProcess.getUser() != null || !Objects.equals(reservationToProcess.getParkingLot().getId(), parkingLotId)) {
+            throw new InvalidDataException("Mismatch: Found reservation " + reservationToProcess.getId() + " is not a valid guest reservation for the specified lot/device for GPS check-in.");
+        }
+
+        reservationToProcess.setHasCheckedIn(true);
+        reservationToProcess.setHasCheckedOut(false);
+        reservationRepository.save(reservationToProcess);
+        System.out.println("Guest (Device: " + deviceIdentifier + ") GPS checked into lot " + parkingLotId + " for reservation " + reservationToProcess.getId());
+    }
+
     @Transactional
     public void gpsCheckOutUser(String userId, String parkingLotId) {
         User user = userRepository.findById(userId)
@@ -106,6 +131,29 @@ public class ParkingLotAccessService {
 
         reservationToProcess.setHasCheckedOut(true);
         reservationRepository.save(reservationToProcess);
+    }
+
+    @Transactional
+    public void gpsCheckOutGuest(String deviceIdentifier, String parkingLotId) {
+         ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                 .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found: " + parkingLotId));
+
+        List<ReservationStatus> eligibleStatuses = List.of(ReservationStatus.PAID, ReservationStatus.ACTIVE);
+
+        Reservation reservationToProcess = reservationRepository
+                .findTopByUserIsNullAndDeviceIdentifierAndParkingLotIdAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+                        deviceIdentifier, parkingLotId, eligibleStatuses)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Guest (Device: " + deviceIdentifier + "): No eligible active reservation found at parking lot " + parkingLotId +
+                                " to check out from."));
+
+        if (reservationToProcess.getUser() != null || !Objects.equals(reservationToProcess.getParkingLot().getId(), parkingLotId)) {
+            throw new InvalidDataException("Mismatch: Found reservation " + reservationToProcess.getId() + " is not a valid guest reservation for the specified lot/device for GPS check-out.");
+        }
+
+        reservationToProcess.setHasCheckedOut(true);
+        reservationRepository.save(reservationToProcess);
+        System.out.println("Guest (Device: " + deviceIdentifier + ") GPS checked out from lot " + parkingLotId + " for reservation " + reservationToProcess.getId());
     }
 
     @Transactional
