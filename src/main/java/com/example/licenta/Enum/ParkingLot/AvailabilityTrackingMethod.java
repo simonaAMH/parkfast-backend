@@ -27,6 +27,6 @@ public enum AvailabilityTrackingMethod {
                 return method;
             }
         }
-        throw new InvalidDataException("Invalid availability method: " + value);
+        throw new InvalidDataException("Invalid availability tracking method: " + value);
     }
 }
