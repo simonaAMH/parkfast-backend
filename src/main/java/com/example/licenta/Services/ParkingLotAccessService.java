@@ -70,6 +70,7 @@ public class ParkingLotAccessService {
         }
 
         reservationToProcess.setHasCheckedIn(true);
+        reservationToProcess.setHasCheckedOut(false);
         reservationRepository.save(reservationToProcess);
     }
 
@@ -129,6 +130,7 @@ public class ParkingLotAccessService {
             userRepository.save(user);
         }
 
+        reservationToProcess.setHasCheckedIn(true);
         reservationToProcess.setHasCheckedOut(true);
         reservationRepository.save(reservationToProcess);
     }
@@ -152,6 +154,7 @@ public class ParkingLotAccessService {
         }
 
         reservationToProcess.setHasCheckedOut(true);
+        reservationToProcess.setHasCheckedIn(true);
         reservationRepository.save(reservationToProcess);
         System.out.println("Guest (Device: " + deviceIdentifier + ") GPS checked out from lot " + parkingLotId + " for reservation " + reservationToProcess.getId());
     }
@@ -184,6 +187,7 @@ public class ParkingLotAccessService {
             }
 
             reservation.setHasCheckedIn(true);
+            reservation.setHasCheckedOut(false);
             reservationRepository.save(reservation);
             return;
         }
@@ -196,6 +200,7 @@ public class ParkingLotAccessService {
         if (guestReservationOpt.isPresent()) {
             Reservation reservation = guestReservationOpt.get();
             reservation.setHasCheckedIn(true);
+            reservation.setHasCheckedOut(false);
             reservationRepository.save(reservation);
             return;
         }
@@ -231,6 +236,7 @@ public class ParkingLotAccessService {
             user.setCurrentParkingLotId(null);
             userRepository.save(user);
             reservation.setHasCheckedOut(true);
+            reservation.setHasCheckedIn(true);
             reservationRepository.save(reservation);
             return;
         }
@@ -243,6 +249,7 @@ public class ParkingLotAccessService {
         if (guestReservationOpt.isPresent()) {
             Reservation reservation = guestReservationOpt.get();
             reservation.setHasCheckedOut(true);
+            reservation.setHasCheckedIn(true);
             reservationRepository.save(reservation);
             return;
         }
@@ -309,6 +316,7 @@ public class ParkingLotAccessService {
 
             reservation.setHasCheckedIn(true);
             reservation.setHasCheckedOut(false);
+            reservationRepository.save(reservation);
 
             if (user != null) {
                 user.setCurrentParkingLotId(parkingLot.getId());
@@ -330,6 +338,8 @@ public class ParkingLotAccessService {
             }
 
             reservation.setHasCheckedOut(true);
+            reservation.setHasCheckedIn(true);
+            reservationRepository.save(reservation);
 
             if (user != null) {
                 user.setCurrentParkingLotId(null);
