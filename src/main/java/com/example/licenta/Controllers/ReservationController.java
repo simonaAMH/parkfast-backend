@@ -3,8 +3,11 @@ package com.example.licenta.Controllers;
 import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.JwtComponents.JwtAuthenticationFilter;
 import com.example.licenta.Services.ReservationService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +30,7 @@ import java.util.Optional;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Autowired
     public ReservationController(ReservationService reservationService) {
@@ -63,6 +67,8 @@ public class ReservationController {
             @RequestParam(required = false) List<ReservationType> types,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
+
+        logger.info("Raw 'types' parameter received: {}", types);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
 

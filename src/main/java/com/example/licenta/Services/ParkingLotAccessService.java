@@ -284,9 +284,6 @@ public class ParkingLotAccessService {
                         "Invalid or unknown QR Code."));
 
         if (reservation.getQrTokenExpiry() != null && reservation.getQrTokenExpiry().isBefore(now)) {
-            reservation.setActiveQrToken(null);
-            reservation.setQrTokenExpiry(null);
-            reservationRepository.save(reservation);
             throw new InvalidDataException("QR Code has expired for reservation " + reservation.getId() +
                     ". Expiry: " + reservation.getQrTokenExpiry() + ", Current Time: " + now);
         }
