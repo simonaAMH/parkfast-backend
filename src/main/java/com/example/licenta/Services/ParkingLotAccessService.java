@@ -194,7 +194,7 @@ public class ParkingLotAccessService {
 
         // 2. Try guest's pre-booked reservation
         Optional<Reservation> guestReservationOpt = reservationRepository
-                .findTopByVehiclePlateAndParkingLotIdAndUserIsNullAndHasCheckedInFalseAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
+                .findTopByVehiclePlateAndParkingLotIdAndUserIsNullAndHasCheckedInTrueAndHasCheckedOutFalseAndStatusInOrderByStartTimeAsc(
                         normalizedPlate, parkingLotId, eligibleEntryStatuses);
 
         if (guestReservationOpt.isPresent()) {
