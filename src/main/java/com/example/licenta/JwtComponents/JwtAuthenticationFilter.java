@@ -56,6 +56,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return true;
         }
 
+        if (method.equals("POST") &&
+                (path.equals("/api/access/gps-checkin-guest") ||
+                        path.equals("/api/access/gps-checkout-guest") ||
+                        path.startsWith("/api/access/qr-scan/"))) {
+            logger.debug("Skipping JWT filter for public access endpoint: {} {}", method, path);
+            return true;
+        }
+
         if (method.equals("GET") &&
                 (path.equals("/api/parking-lots") || path.startsWith("/api/parking-lots/"))) {
             logger.debug("Skipping JWT filter for public GET parking lots endpoint: {}", path);

@@ -51,7 +51,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOriginPattern("*"); // Use allowedOriginPatterns for more control if needed
+        configuration.addAllowedOriginPattern("*");
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH","DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "ngrok-skip-browser-warning"));
         configuration.setAllowCredentials(true);
@@ -85,6 +85,12 @@ public class SecurityConfig {
                                 "/api/assistant/chat",
                                 "/api/uploads/**",
                                 "/error"
+                        ).permitAll()
+
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/access/gps-checkin-guest",
+                                "/api/access/gps-checkout-guest",
+                                "/api/access/qr-scan/**"
                         ).permitAll()
 
                         .requestMatchers(HttpMethod.GET,
