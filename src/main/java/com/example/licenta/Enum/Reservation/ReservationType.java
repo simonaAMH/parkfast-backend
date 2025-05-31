@@ -20,8 +20,12 @@ public enum ReservationType {
 
     @JsonCreator
     public static ReservationType fromString(String value) {
+        if (value == null) {
+            throw new InvalidDataException("Invalid reservation type: null");
+        }
+        String trimmedValue = value.trim();
         for (ReservationType type : ReservationType.values()) {
-            if (type.name().equalsIgnoreCase(value) || type.getValue().equalsIgnoreCase(value)) {
+            if (type.name().equalsIgnoreCase(trimmedValue) || type.getValue().equalsIgnoreCase(trimmedValue)) {
                 return type;
             }
         }
