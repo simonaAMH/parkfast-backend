@@ -90,6 +90,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/access/gps-checkin-guest",
                                 "/api/access/gps-checkout-guest",
+                                "/api/access/barrier/verify-entry",
+                                "/api/access/barrier/verify-exit",
                                 "/api/access/qr-scan/**"
                         ).permitAll()
 
