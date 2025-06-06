@@ -12,6 +12,7 @@ import com.example.licenta.Mappers.ReservationMapper;
 import com.example.licenta.Models.*;
 import com.example.licenta.Repositories.*;
 import com.stripe.exception.StripeException;
+import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -436,7 +437,7 @@ public class ReservationService {
             return guestAccessTokenRepository.save(newToken);
         }
     }
-
+    
     @Transactional
     public ReservationDTO handlePayment(String reservationId, PaymentRequestDTO paymentRequest) {
         Reservation reservation = reservationRepository.findById(reservationId)
@@ -464,12 +465,12 @@ public class ReservationService {
             }
         }
 
-        // Case 1: Activating a PAY_FOR_USAGE reservation (no payment yet, just activation)
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+            // ... (Pay for usage activation logic - remains the same)
             reservation.setStatus(ReservationStatus.ACTIVE);
 
-            if (user == null) { // Guest user
-                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null); // No expiry for active pay_for_usage token
+            if (user == null) {
+                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null);
                 guestAccessTokenString = guestToken.getToken();
             }
 
@@ -486,65 +487,77 @@ public class ReservationService {
             }
             return reservationMapper.toDTO(updatedReservation);
 
-            // Case 2: Invalid state - STANDARD/DIRECT reservation without an end time trying to be paid
         } else if (reservation.getReservationType() != ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+            // ... (Invalid state logic - remains the same)
             throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
                     reservation.getReservationType() + " must have an end time for final payment processing.");
-
-            // Case 3: Finalizing payment for any reservation type that has an end time and amount
         } else {
             User owner = parkingLot.getOwner();
             Double totalAmountForReservation = reservation.getTotalAmount();
-            Double finalAmountToCharge = totalAmountForReservation;
+            Double finalAmountCustomerPays = totalAmountForReservation; // Amount customer effectively pays after points
 
             if (totalAmountForReservation == null || totalAmountForReservation < 0) {
                 throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid total amount for payment processing.");
             }
 
             if (user != null && pointsToUse > 0) {
-                finalAmountToCharge = totalAmountForReservation - (pointsToUse * 0.1); // Assuming 1 point = 0.1 currency unit
-                if (finalAmountToCharge < 0) {
-                    finalAmountToCharge = 0.0;
+                finalAmountCustomerPays = totalAmountForReservation - (pointsToUse * 0.1);
+                if (finalAmountCustomerPays < 0) {
+                    finalAmountCustomerPays = 0.0;
                 }
             }
-            finalAmountToCharge = BigDecimal.valueOf(finalAmountToCharge).setScale(2, RoundingMode.HALF_UP).doubleValue();
+            finalAmountCustomerPays = BigDecimal.valueOf(finalAmountCustomerPays).setScale(2, RoundingMode.HALF_UP).doubleValue();
 
+            Double netAmountForOwner = 0.0; // This will be the amount after Stripe fees
 
-            if (finalAmountToCharge > 0) {
+            if (finalAmountCustomerPays > 0) {
                 try {
-                    long amountInSmallestUnit = Math.round(finalAmountToCharge * 100); // e.g., for RON (bani)
+                    long amountToChargeInSmallestUnit = Math.round(finalAmountCustomerPays * 100);
                     String chargeDescription = "Payment for Reservation ID: " + reservation.getId() +
                             " by user: " + (user != null ? user.getUsername() : "Guest") +
                             " for parking lot: " + parkingLot.getName();
 
-                    System.out.println("Attempting Stripe charge for reservation " + reservationId + " with amount " + finalAmountToCharge + " RON (" + amountInSmallestUnit + " smallest unit)");
+                    System.out.println("Attempting Stripe charge for reservation " + reservationId + " with amount " + finalAmountCustomerPays + " RON (" + amountToChargeInSmallestUnit + " smallest unit)");
 
-                    // Assuming stripeService.createPlatformCharge now takes currency as the second argument
-                    Charge stripeCharge = stripeService.createPlatformCharge(amountInSmallestUnit, chargeDescription);
-
+                    // Call StripeService to create the charge
+                    Charge stripeCharge = stripeService.createPlatformCharge(amountToChargeInSmallestUnit, chargeDescription);
 
                     if (!"succeeded".equalsIgnoreCase(stripeCharge.getStatus())) {
                         String failureMessage = "Stripe charge attempt was not successful. Status: " + stripeCharge.getStatus();
                         System.err.println(failureMessage + " for Charge ID: " + stripeCharge.getId());
                         reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                        reservationRepository.save(reservation); // Save status before throwing
+                        reservationRepository.save(reservation);
                         throw new PaymentProcessingException(failureMessage);
                     }
                     System.out.println("Stripe charge successful for reservation " + reservationId + ". Charge ID: " + stripeCharge.getId());
-                    // Optionally, store stripeCharge.getId() on the reservation if you have a field for it.
+
+                    // Retrieve the BalanceTransaction to get the net amount
+                    if (stripeCharge.getBalanceTransaction() != null) {
+                        BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(stripeCharge.getBalanceTransaction());
+                        netAmountForOwner = BigDecimal.valueOf(balanceTransaction.getNet())
+                                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                                .doubleValue(); // Convert from smallest unit (e.g., bani) to RON
+                        System.out.println("Net amount from Stripe (after fees) for Charge ID " + stripeCharge.getId() + ": " + netAmountForOwner + " RON");
+                    } else {
+                        // Fallback or error if balance transaction ID is not available, though it should be for successful charges.
+                        // For simplicity, we might assume finalAmountCustomerPays is close enough if BT is missing,
+                        // but ideally, this scenario should be handled robustly.
+                        System.err.println("Warning: BalanceTransaction ID not found on successful charge " + stripeCharge.getId() + ". Using customer paid amount for owner earnings, which may not account for Stripe fees.");
+                        netAmountForOwner = finalAmountCustomerPays;
+                    }
 
                 } catch (StripeException e) {
                     String stripeErrorMessage = (e.getStripeError() != null && e.getStripeError().getMessage() != null) ?
                             e.getStripeError().getMessage() : e.getMessage();
                     if (stripeErrorMessage == null) stripeErrorMessage = "An unknown Stripe error occurred during payment processing.";
-
                     System.err.println("StripeException during payment for reservation " + reservationId + ": " + stripeErrorMessage);
                     reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation); // Save status before throwing
+                    reservationRepository.save(reservation);
                     throw new PaymentProcessingException(stripeErrorMessage);
                 }
             } else {
-                System.out.println("Final amount to charge is 0 or less for reservation " + reservationId + ". Skipping Stripe charge.");
+                System.out.println("Final amount customer pays is 0 or less for reservation " + reservationId + ". Skipping Stripe charge. Net amount for owner is 0.");
+                netAmountForOwner = 0.0;
             }
 
             reservation.setStatus(ReservationStatus.PAID);
@@ -554,17 +567,25 @@ public class ReservationService {
                 user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsToUse));
             }
             reservation.setPointsUsed(pointsToUse);
-            reservation.setFinalAmount(finalAmountToCharge);
+            // finalAmount on reservation should reflect what the customer paid after points
+            reservation.setFinalAmount(finalAmountCustomerPays);
 
-            if (owner != null && finalAmountToCharge > 0) {
+            // IMPORTANT: Update owner's pending earnings with the NET amount after Stripe fees
+            if (owner != null && netAmountForOwner > 0) {
                 Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
                 Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
-                owner.setPendingEarnings(currentPendingEarnings + finalAmountToCharge);
-                owner.setTotalEarnings(currentTotalEarnings + finalAmountToCharge);
+
+                // Add the net amount (after Stripe fees) to pending earnings
+                owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
+                // Total earnings could also track net, or gross depending on your accounting model
+                // For consistency, let's assume total earnings also track amounts that will actually be paid out (net).
+                owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
+                System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
             }
 
-            if (user != null && finalAmountToCharge > 0) {
-                double pointsToAddUnrounded = finalAmountToCharge * 0.05;
+            // Award loyalty points based on what the customer actually paid (finalAmountCustomerPays)
+            if (user != null && finalAmountCustomerPays > 0) {
+                double pointsToAddUnrounded = finalAmountCustomerPays * 0.05;
                 BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
                         .setScale(2, RoundingMode.HALF_UP);
                 Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
@@ -573,7 +594,6 @@ public class ReservationService {
             }
 
             if (user != null) userRepository.save(user);
-            // Avoid saving owner if it's the same as user and already saved
             if (owner != null && (user == null || !owner.getId().equals(user.getId()))) {
                 userRepository.save(owner);
             }
@@ -593,7 +613,7 @@ public class ReservationService {
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
                         updatedReservation.getEndTime(),
-                        finalAmountToCharge,
+                        finalAmountCustomerPays, // Email shows what customer paid
                         guestAccessTokenString
                 );
             }
