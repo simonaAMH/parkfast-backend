@@ -16,6 +16,7 @@ public class WithdrawalResponseDTO {
     private Double amount;
     private String bankAccountName;
     private String bankAccountNumber;
+    private String stripePayoutId;
     private Withdrawal.WithdrawalStatus status;
     private String failureReason;
     private OffsetDateTime requestedAt;

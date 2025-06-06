@@ -5,11 +5,14 @@ import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.Exceptions.InvalidDataException;
+import com.example.licenta.Exceptions.PaymentProcessingException;
 import com.example.licenta.Exceptions.ResourceAlreadyExistsException;
 import com.example.licenta.Exceptions.ResourceNotFoundException;
 import com.example.licenta.Mappers.ReservationMapper;
 import com.example.licenta.Models.*;
 import com.example.licenta.Repositories.*;
+import com.stripe.exception.StripeException;
+import com.stripe.model.Charge;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -24,7 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
@@ -44,6 +46,7 @@ public class ReservationService {
     private static final Random random = new Random();
     private final GuestAccessTokenRepository guestAccessTokenRepository;
     private final ReviewRepository reviewRepository;
+    private final StripeService stripeService; // Inject StripeService
 
     @Autowired
     public ReservationService(ReservationRepository reservationRepository,
@@ -53,7 +56,8 @@ public class ReservationService {
                               OpenAiChatModel openAiChatModel,
                               EmailService emailService,
                               ReviewRepository reviewRepository,
-                              GuestAccessTokenRepository guestAccessTokenRepository) {
+                              GuestAccessTokenRepository guestAccessTokenRepository,
+                              StripeService stripeService) { // Add StripeService to constructor
         this.reservationRepository = reservationRepository;
         this.parkingLotRepository = parkingLotRepository;
         this.userRepository = userRepository;
@@ -62,8 +66,8 @@ public class ReservationService {
         this.emailService = emailService;
         this.reviewRepository = reviewRepository;
         this.guestAccessTokenRepository = guestAccessTokenRepository;
+        this.stripeService = stripeService; // Initialize StripeService
     }
-
 
     @Transactional
     public ReservationDTO createDirectReservation(CreateReservationDTO dto) {
@@ -443,8 +447,8 @@ public class ReservationService {
             throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
         }
 
-        if (reservation.getStatus() != ReservationStatus.PAYMENT_FAILED && reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status. Current status: " + reservation.getStatus());
+        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT && reservation.getStatus() != ReservationStatus.PAYMENT_FAILED) {
+            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status for payment. Current status: " + reservation.getStatus());
         }
 
         User user = reservation.getUser();
@@ -452,7 +456,7 @@ public class ReservationService {
                 user.getEmail() : reservation.getGuestEmail();
         String guestAccessTokenString = null;
 
-        Double pointsToUse = (paymentRequest != null) ? paymentRequest.getPointsToUse() : 0.0;
+        Double pointsToUse = (paymentRequest != null && paymentRequest.getPointsToUse() != null) ? paymentRequest.getPointsToUse() : 0.0;
         if (user != null && pointsToUse > 0) {
             Double userCurrentPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
             if (userCurrentPoints < pointsToUse) {
@@ -460,12 +464,12 @@ public class ReservationService {
             }
         }
 
-        //doar o activam
+        // Case 1: Activating a PAY_FOR_USAGE reservation (no payment yet, just activation)
         if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             reservation.setStatus(ReservationStatus.ACTIVE);
 
-            if (user == null) {
-                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null);
+            if (user == null) { // Guest user
+                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null); // No expiry for active pay_for_usage token
                 guestAccessTokenString = guestToken.getToken();
             }
 
@@ -482,65 +486,105 @@ public class ReservationService {
             }
             return reservationMapper.toDTO(updatedReservation);
 
-            //daca nu are endtime si nu e tip pay for usage (adica activare) -> eroare
+            // Case 2: Invalid state - STANDARD/DIRECT reservation without an end time trying to be paid
         } else if (reservation.getReservationType() != ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
             throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
                     reservation.getReservationType() + " must have an end time for final payment processing.");
 
-            //acum procesam doar daca are endTime (deci are un pret final, orice tip de rezervare
+            // Case 3: Finalizing payment for any reservation type that has an end time and amount
         } else {
-            if (user == null) {
-                OffsetDateTime tokenExpiry = null;
-                tokenExpiry = reservation.getEndTime().plusHours(1);
-                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, tokenExpiry);
-                guestAccessTokenString = guestToken.getToken();
-            }
-
             User owner = parkingLot.getOwner();
-            Double amountToPay = reservation.getTotalAmount();
-            Double finalAmount = amountToPay;
+            Double totalAmountForReservation = reservation.getTotalAmount();
+            Double finalAmountToCharge = totalAmountForReservation;
 
-            if (amountToPay == null || amountToPay < 0) {
-                throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a final amount for payment processing.");
+            if (totalAmountForReservation == null || totalAmountForReservation < 0) {
+                throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid total amount for payment processing.");
             }
 
-            if (pointsToUse > 0 && user != null) {
-                finalAmount = amountToPay - pointsToUse * 0.1;
-                if (finalAmount < 0) {
-                    finalAmount = 0.0;
+            if (user != null && pointsToUse > 0) {
+                finalAmountToCharge = totalAmountForReservation - (pointsToUse * 0.1); // Assuming 1 point = 0.1 currency unit
+                if (finalAmountToCharge < 0) {
+                    finalAmountToCharge = 0.0;
                 }
-                Double currentLoyaltyPoints = Optional.of(user.getLoyaltyPoints()).orElse(0.0);
-                user.setLoyaltyPoints(currentLoyaltyPoints - pointsToUse);
-                userRepository.save(user);
+            }
+            finalAmountToCharge = BigDecimal.valueOf(finalAmountToCharge).setScale(2, RoundingMode.HALF_UP).doubleValue();
+
+
+            if (finalAmountToCharge > 0) {
+                try {
+                    long amountInSmallestUnit = Math.round(finalAmountToCharge * 100); // e.g., for RON (bani)
+                    String chargeDescription = "Payment for Reservation ID: " + reservation.getId() +
+                            " by user: " + (user != null ? user.getUsername() : "Guest") +
+                            " for parking lot: " + parkingLot.getName();
+
+                    System.out.println("Attempting Stripe charge for reservation " + reservationId + " with amount " + finalAmountToCharge + " RON (" + amountInSmallestUnit + " smallest unit)");
+
+                    // Assuming stripeService.createPlatformCharge now takes currency as the second argument
+                    Charge stripeCharge = stripeService.createPlatformCharge(amountInSmallestUnit, chargeDescription);
+
+
+                    if (!"succeeded".equalsIgnoreCase(stripeCharge.getStatus())) {
+                        String failureMessage = "Stripe charge attempt was not successful. Status: " + stripeCharge.getStatus();
+                        System.err.println(failureMessage + " for Charge ID: " + stripeCharge.getId());
+                        reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+                        reservationRepository.save(reservation); // Save status before throwing
+                        throw new PaymentProcessingException(failureMessage);
+                    }
+                    System.out.println("Stripe charge successful for reservation " + reservationId + ". Charge ID: " + stripeCharge.getId());
+                    // Optionally, store stripeCharge.getId() on the reservation if you have a field for it.
+
+                } catch (StripeException e) {
+                    String stripeErrorMessage = (e.getStripeError() != null && e.getStripeError().getMessage() != null) ?
+                            e.getStripeError().getMessage() : e.getMessage();
+                    if (stripeErrorMessage == null) stripeErrorMessage = "An unknown Stripe error occurred during payment processing.";
+
+                    System.err.println("StripeException during payment for reservation " + reservationId + ": " + stripeErrorMessage);
+                    reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+                    reservationRepository.save(reservation); // Save status before throwing
+                    throw new PaymentProcessingException(stripeErrorMessage);
+                }
+            } else {
+                System.out.println("Final amount to charge is 0 or less for reservation " + reservationId + ". Skipping Stripe charge.");
             }
 
             reservation.setStatus(ReservationStatus.PAID);
-            reservation.setPointsUsed(pointsToUse);
-            reservation.setFinalAmount(finalAmount);
-            reservationRepository.save(reservation);
 
-            if (owner != null && finalAmount.compareTo(0.0) > 0) {
+            if (user != null && pointsToUse > 0) {
+                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+                user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsToUse));
+            }
+            reservation.setPointsUsed(pointsToUse);
+            reservation.setFinalAmount(finalAmountToCharge);
+
+            if (owner != null && finalAmountToCharge > 0) {
                 Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
                 Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
-                owner.setPendingEarnings(currentPendingEarnings + finalAmount);
-                owner.setTotalEarnings(currentTotalEarnings + finalAmount);
-                userRepository.save(owner);
+                owner.setPendingEarnings(currentPendingEarnings + finalAmountToCharge);
+                owner.setTotalEarnings(currentTotalEarnings + finalAmountToCharge);
             }
 
-            if (user != null && finalAmount.compareTo(0.0) > 0) {
-                double pointsToAddUnrounded = finalAmount * 0.05;
-
+            if (user != null && finalAmountToCharge > 0) {
+                double pointsToAddUnrounded = finalAmountToCharge * 0.05;
                 BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
                         .setScale(2, RoundingMode.HALF_UP);
                 Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
-
                 Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-
                 user.setLoyaltyPoints(currentLoyaltyPoints + pointsToAdd);
-                userRepository.save(user);
+            }
+
+            if (user != null) userRepository.save(user);
+            // Avoid saving owner if it's the same as user and already saved
+            if (owner != null && (user == null || !owner.getId().equals(user.getId()))) {
+                userRepository.save(owner);
             }
 
             Reservation updatedReservation = reservationRepository.save(reservation);
+
+            if (user == null) {
+                OffsetDateTime tokenExpiry = updatedReservation.getEndTime() != null ? updatedReservation.getEndTime().plusHours(1) : OffsetDateTime.now().plusHours(24);
+                GuestAccessToken guestToken = generateOrUpdateGuestToken(updatedReservation, tokenExpiry);
+                guestAccessTokenString = guestToken.getToken();
+            }
 
             if (recipientEmail != null && !recipientEmail.isEmpty()) {
                 emailService.sendReservationConfirmationEmail(
@@ -549,7 +593,7 @@ public class ReservationService {
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
                         updatedReservation.getEndTime(),
-                        finalAmount,
+                        finalAmountToCharge,
                         guestAccessTokenString
                 );
             }

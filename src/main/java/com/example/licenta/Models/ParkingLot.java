@@ -229,6 +229,9 @@ public class ParkingLot {
     @Column(name = "spots_available")
     private Integer spotsAvailable;
 
+    @Column(name = "stripe_connected_account_id", nullable = true, length = 255)
+    private String stripeConnectedAccountId;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 

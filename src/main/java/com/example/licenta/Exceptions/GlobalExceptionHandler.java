@@ -1,6 +1,7 @@
 package com.example.licenta.Exceptions;
 
 import com.example.licenta.DTOs.ApiResponse;
+import com.stripe.exception.StripeException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private static final String VALIDATION_FAILED = "Validation failed";
+    private static final String PAYMENT_PROCESSING_ERROR = "Payment processing error";
+    private static final String STRIPE_API_ERROR = "Stripe API error";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationExceptions(MethodArgumentNotValidException ex) {
@@ -202,6 +205,39 @@ public class GlobalExceptionHandler {
                 errors
         );
 
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+
+    @ExceptionHandler(PaymentProcessingException.class)
+    public ResponseEntity<ApiResponse<Void>> handlePaymentProcessingException(PaymentProcessingException ex) {
+        List<String> errors = Collections.singletonList(ex.getMessage());
+
+        ApiResponse<Void> response = new ApiResponse<>(
+                false,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                PAYMENT_PROCESSING_ERROR,
+                errors
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+
+    @ExceptionHandler(StripeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleStripeException(StripeException ex) {
+        String userMessage = "An error occurred while processing your payment with Stripe. Please try again later.";
+        if (ex.getStripeError() != null && ex.getStripeError().getMessage() != null) {
+            userMessage = "Stripe error: " + ex.getStripeError().getMessage();
+        } else if (ex.getMessage() != null) {
+            userMessage = "Stripe error: " + ex.getMessage();
+        }
+
+        List<String> errors = Collections.singletonList(userMessage);
+
+        ApiResponse<Void> response = new ApiResponse<>(
+                false,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                STRIPE_API_ERROR,
+                errors
+        );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 
