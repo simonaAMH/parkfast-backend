@@ -30,20 +30,20 @@ public class ParkingLotValidator implements ConstraintValidator<ParkingLotConstr
 
         // 1. Extensions validation
         if (parkingLot.isAllowReservations()) {
-            if (parkingLot.isAllowExtensions()) {
-                if (parkingLot.getMaxExtensionTime() == null) {
+            if (parkingLot.isAllowExtensionsForRegular()) {
+                if (parkingLot.getMaxExtensionTimeForRegular() == null) {
                     validationErrors.add("Max extension time is required when extensions are allowed");
                 } else {
-                    checkFieldNotZero(parkingLot.getMaxExtensionTime(), "Max extension time", validationErrors);
+                    checkFieldNotZero(parkingLot.getMaxExtensionTimeForRegular(), "Max extension time", validationErrors);
                 }
 
-                if (parkingLot.getExtensionPricingModel() == null) {
+                if (parkingLot.getExtensionPricingModelForRegular() == null) {
                     validationErrors.add("Extension pricing model is required when extensions are allowed");
-                } else if (parkingLot.getExtensionPricingModel() == ExtensionPricingModel.HIGHER) {
-                    if (parkingLot.getExtensionPricingPercentage() == null) {
+                } else if (parkingLot.getExtensionPricingModelForRegular() == ExtensionPricingModel.HIGHER) {
+                    if (parkingLot.getExtensionPricingPercentageForRegular() == null) {
                         validationErrors.add("Extension pricing percentage is required for HIGHER pricing model");
                     } else {
-                        checkFieldNotZero(parkingLot.getExtensionPricingPercentage(), "Extension pricing percentage", validationErrors);
+                        checkFieldNotZero(parkingLot.getExtensionPricingPercentageForRegular(), "Extension pricing percentage", validationErrors);
                     }
                 }
             }
@@ -137,7 +137,27 @@ public class ParkingLotValidator implements ConstraintValidator<ParkingLotConstr
             }
         }
 
-        if (parkingLot.isAllowReservations() || parkingLot.isDisplayFees() || parkingLot.isAllowDirectPayment()) {
+        if (parkingLot.isAllowDirectPayment()) {
+            if (parkingLot.isAllowExtensionsForOnTheSpot()) {
+                if (parkingLot.getMaxExtensionTimeForOnTheSpot() == null) {
+                    validationErrors.add("Max extension time is required when extensions are allowed");
+                } else {
+                    checkFieldNotZero(parkingLot.getMaxExtensionTimeForOnTheSpot(), "Max extension time", validationErrors);
+                }
+
+                if (parkingLot.getExtensionPricingModelForOnTheSpot() == null) {
+                    validationErrors.add("Extension pricing model is required when extensions are allowed");
+                } else if (parkingLot.getExtensionPricingModelForOnTheSpot() == ExtensionPricingModel.HIGHER) {
+                    if (parkingLot.getExtensionPricingPercentageForOnTheSpot() == null) {
+                        validationErrors.add("Extension pricing percentage is required for HIGHER pricing model");
+                    } else {
+                        checkFieldNotZero(parkingLot.getExtensionPricingPercentageForOnTheSpot(), "Extension pricing percentage", validationErrors);
+                    }
+                }
+            }
+        }
+
+            if (parkingLot.isAllowReservations() || parkingLot.isDisplayFees() || parkingLot.isAllowDirectPayment()) {
             // 4. Pricing type validation
             if (parkingLot.getPricingType() != null && parkingLot.getPricingType() == PricingType.FIXED) {
                 if (parkingLot.getPriceIntervals() == null || parkingLot.getPriceIntervals().isEmpty()) {

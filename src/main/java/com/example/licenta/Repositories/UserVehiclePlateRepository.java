@@ -13,8 +13,6 @@ import java.util.Optional;
 @Repository
 public interface UserVehiclePlateRepository extends JpaRepository<UserVehiclePlate, String> {
     List<UserVehiclePlate> findByUserId(String userId);
-
     Optional<UserVehiclePlate> findByUserIdAndId(String userId, String id);
-
     boolean existsByUserIdAndPlateNumber(String userId, String plateNumber);
 }

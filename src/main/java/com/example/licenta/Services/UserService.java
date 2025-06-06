@@ -1,18 +1,13 @@
 package com.example.licenta.Services;
 
-import com.example.licenta.DTOs.UserPaymentMethodDTO;
-import com.example.licenta.DTOs.UserRegistrationDTO;
-import com.example.licenta.DTOs.UserUpdateDTO;
-import com.example.licenta.DTOs.UserVehiclePlateDTO;
+import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.User.Role;
 import com.example.licenta.Exceptions.*;
-import com.example.licenta.Models.User;
-import com.example.licenta.Models.UserPaymentMethod;
-import com.example.licenta.Models.UserVehiclePlate;
-import com.example.licenta.Repositories.UserPaymentMethodRepository;
-import com.example.licenta.Repositories.UserRepository;
-import com.example.licenta.Repositories.UserVehiclePlateRepository;
+import com.example.licenta.Models.*;
+import com.example.licenta.Repositories.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +22,8 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ParkingLotRepository parkingLotRepository;
+    private final WithdrawalRepository withdrawalRepository;
     private final UserVehiclePlateRepository vehiclePlateRepository;
     private final UserPaymentMethodRepository paymentMethodRepository;
     private final PasswordEncoder passwordEncoder;
@@ -39,13 +36,17 @@ public class UserService {
                        UserPaymentMethodRepository paymentMethodRepository,
                        PasswordEncoder passwordEncoder,
                        EmailService emailService,
-                       ImageService imageService) {
+                       ImageService imageService,
+                       ParkingLotRepository parkingLotRepository,
+                       WithdrawalRepository withdrawalRepository) {
         this.userRepository = userRepository;
         this.vehiclePlateRepository = vehiclePlateRepository;
         this.paymentMethodRepository = paymentMethodRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.imageService = imageService;
+        this.parkingLotRepository = parkingLotRepository;
+        this.withdrawalRepository = withdrawalRepository;
     }
 
     @Transactional
@@ -101,6 +102,11 @@ public class UserService {
             return userOptional;
         }
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 
     @Transactional
@@ -311,6 +317,215 @@ public class UserService {
             throw new ResourceNotFoundException("User not found with ID: " + userId);
         }
         return paymentMethodRepository.findByUserId(userId);
+    }
+
+    @Transactional
+    public WithdrawalResponseDTO requestWithdrawal(String userId, WithdrawalRequestDTO withdrawalRequest) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        ParkingLot parkingLot = parkingLotRepository.findById(withdrawalRequest.getParkingLotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found: " + withdrawalRequest.getParkingLotId()));
+
+        // Verify user owns the parking lot
+        if (!parkingLot.getOwner().getId().equals(userId)) {
+            throw new InvalidDataException("You are not the owner of this parking lot");
+        }
+
+        // Check if parking lot has bank account details
+        if (parkingLot.getBankAccountName() == null || parkingLot.getBankAccountName().trim().isEmpty() ||
+                parkingLot.getBankAccountNumber() == null || parkingLot.getBankAccountNumber().trim().isEmpty()) {
+            throw new InvalidDataException("Bank account details are not configured for this parking lot. Please update your parking lot settings.");
+        }
+
+        // Check if user has pending earnings
+        Double pendingEarnings = user.getPendingEarnings();
+        if (pendingEarnings == null || pendingEarnings <= 0) {
+            throw new InvalidDataException("No pending earnings available for withdrawal");
+        }
+
+        // Check if there's already a pending/processing withdrawal for this parking lot
+        boolean hasPendingWithdrawal = withdrawalRepository.existsByUserIdAndParkingLotIdAndStatusIn(
+                userId,
+                parkingLot.getId(),
+                List.of(Withdrawal.WithdrawalStatus.PENDING, Withdrawal.WithdrawalStatus.PROCESSING)
+        );
+
+        if (hasPendingWithdrawal) {
+            throw new InvalidDataException("There is already a pending withdrawal request for this parking lot");
+        }
+
+        // Create withdrawal record
+        Withdrawal withdrawal = Withdrawal.builder()
+                .user(user)
+                .parkingLot(parkingLot)
+                .amount(pendingEarnings)
+                .bankAccountName(parkingLot.getBankAccountName())
+                .bankAccountNumber(parkingLot.getBankAccountNumber())
+                .status(Withdrawal.WithdrawalStatus.PENDING)
+                .build();
+
+        Withdrawal savedWithdrawal = withdrawalRepository.save(withdrawal);
+
+        // Process the withdrawal immediately (you can also queue this for background processing)
+        try {
+            processWithdrawalPayment(savedWithdrawal);
+        } catch (Exception e) {
+            // If processing fails, mark as failed
+            savedWithdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            savedWithdrawal.setFailureReason("Payment processing failed: " + e.getMessage());
+            savedWithdrawal.setProcessedAt(OffsetDateTime.now());
+            withdrawalRepository.save(savedWithdrawal);
+
+            throw new InvalidDataException("Withdrawal processing failed: " + e.getMessage());
+        }
+
+        return convertToWithdrawalResponseDTO(savedWithdrawal);
+    }
+
+    @Transactional
+    protected void processWithdrawalPayment(Withdrawal withdrawal) throws InterruptedException {
+        try {
+            // Update status to processing
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.PROCESSING);
+            withdrawalRepository.save(withdrawal);
+
+            // For testing purposes, we'll simulate a successful transfer
+            // In production, you would integrate with your actual payment processor
+
+            // Simulate processing delay (remove in production)
+            Thread.sleep(1000);
+
+            // Mark as completed
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.COMPLETED);
+            withdrawal.setProcessedAt(OffsetDateTime.now());
+            withdrawal.setStripePayoutId("test_payout_" + System.currentTimeMillis()); // Simulated payout ID
+            withdrawalRepository.save(withdrawal);
+
+            // Update user's earnings
+            User user = withdrawal.getUser();
+            Double withdrawnAmount = withdrawal.getAmount();
+
+            user.setPendingEarnings(0.0); // All pending earnings withdrawn
+
+            Double currentPaidEarnings = Optional.ofNullable(user.getPaidEarnings()).orElse(0.0);
+            user.setPaidEarnings(currentPaidEarnings + withdrawnAmount);
+
+            userRepository.save(user);
+
+            emailService.sendWithdrawalConfirmationEmail(
+                    user.getEmail(),
+                    withdrawal.getId(),
+                    withdrawnAmount,
+                    withdrawal.getBankAccountNumber(),
+                    withdrawal.getParkingLot().getName()
+            );
+
+        } catch (Exception e) {
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            withdrawal.setFailureReason(e.getMessage());
+            withdrawal.setProcessedAt(OffsetDateTime.now());
+            withdrawalRepository.save(withdrawal);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WithdrawalResponseDTO> getUserWithdrawals(String userId, Pageable pageable) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("User not found: " + userId);
+        }
+
+        Page<Withdrawal> withdrawalPage = withdrawalRepository.findByUserIdOrderByRequestedAtDesc(userId, pageable);
+
+        return withdrawalPage.map(this::convertToWithdrawalResponseDTO);
+    }
+
+    @Transactional(readOnly = true)
+    public WithdrawalSummaryDTO getWithdrawalSummary(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        // Get recent withdrawals (last 5)
+        List<Withdrawal> recentWithdrawals = withdrawalRepository
+                .findByUserIdAndRequestedAtAfterOrderByRequestedAtDesc(
+                        userId,
+                        OffsetDateTime.now().minusMonths(3)
+                )
+                .stream()
+                .limit(5)
+                .toList();
+
+        List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
+
+        List<ParkingLotWithdrawalInfoDTO> availableParkingLots = userParkingLots.stream()
+                .map(lot -> {
+                    boolean canWithdraw = lot.getBankAccountName() != null &&
+                            lot.getBankAccountNumber() != null &&
+                            user.getPendingEarnings() != null &&
+                            user.getPendingEarnings() > 0;
+
+                    String blockReason = null;
+                    if (lot.getBankAccountName() == null || lot.getBankAccountNumber() == null) {
+                        blockReason = "Bank account details not configured";
+                    } else if (user.getPendingEarnings() == null || user.getPendingEarnings() <= 0) {
+                        blockReason = "No pending earnings available";
+                    }
+
+                    return ParkingLotWithdrawalInfoDTO.builder()
+                            .id(lot.getId())
+                            .name(lot.getName())
+                            .address(lot.getAddress())
+                            .bankAccountName(lot.getBankAccountName())
+                            .bankAccountNumber(lot.getBankAccountNumber())
+                            .pendingEarnings(user.getPendingEarnings())
+                            .canWithdraw(canWithdraw)
+                            .withdrawalBlockReason(blockReason)
+                            .build();
+                })
+                .toList();
+
+        return WithdrawalSummaryDTO.builder()
+                .totalPendingEarnings(user.getPendingEarnings())
+                .totalPaidEarnings(user.getPaidEarnings())
+                .totalWithdrawals((int) withdrawalRepository.countByUserId(userId))
+                .recentWithdrawals(recentWithdrawals.stream()
+                        .map(this::convertToWithdrawalResponseDTO)
+                        .toList())
+                .availableParkingLots(availableParkingLots)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public WithdrawalResponseDTO getWithdrawalById(String userId, String withdrawalId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("User not found: " + userId);
+        }
+
+        Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found: " + withdrawalId));
+
+        if (!withdrawal.getUser().getId().equals(userId)) {
+            throw new InvalidDataException("Withdrawal does not belong to this user");
+        }
+
+        return convertToWithdrawalResponseDTO(withdrawal);
+    }
+
+    private WithdrawalResponseDTO convertToWithdrawalResponseDTO(Withdrawal withdrawal) {
+        return WithdrawalResponseDTO.builder()
+                .id(withdrawal.getId())
+                .userId(withdrawal.getUser().getId())
+                .parkingLotId(withdrawal.getParkingLot().getId())
+                .parkingLotName(withdrawal.getParkingLot().getName())
+                .amount(withdrawal.getAmount())
+                .bankAccountName(withdrawal.getBankAccountName())
+                .bankAccountNumber(withdrawal.getBankAccountNumber())
+                .status(withdrawal.getStatus())
+                .failureReason(withdrawal.getFailureReason())
+                .requestedAt(withdrawal.getRequestedAt())
+                .processedAt(withdrawal.getProcessedAt())
+                .build();
     }
 
     @Transactional(readOnly = true)

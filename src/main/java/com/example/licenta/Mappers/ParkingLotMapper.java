@@ -41,8 +41,10 @@ public class ParkingLotMapper {
         dto.setFreeTimeMinutes(parkingLot.getFreeTimeMinutes());
         dto.setBankAccountName(parkingLot.getBankAccountName());
         dto.setBankAccountNumber(parkingLot.getBankAccountNumber());
-        dto.setMaxExtensionTime(parkingLot.getMaxExtensionTime());
-        dto.setExtensionPricingPercentage(parkingLot.getExtensionPricingPercentage());
+        dto.setMaxExtensionTimeForRegular(parkingLot.getMaxExtensionTimeForRegular());
+        dto.setExtensionPricingPercentageForRegular(parkingLot.getExtensionPricingPercentageForRegular());
+        dto.setMaxExtensionTimeForOnTheSpot(parkingLot.getMaxExtensionTimeForOnTheSpot());
+        dto.setExtensionPricingPercentageForOnTheSpot(parkingLot.getExtensionPricingPercentageForOnTheSpot());
         dto.setPreReservationCancelWindow(parkingLot.getPreReservationCancelWindow());
         dto.setPreReservationCancelFee(parkingLot.getPreReservationCancelFee());
         dto.setMidReservationCancelWindow(parkingLot.getMidReservationCancelWindow());
@@ -61,7 +63,8 @@ public class ParkingLotMapper {
         dto.setDisplayFees(parkingLot.isDisplayFees());
         dto.setHasTimeLimits(parkingLot.isHasTimeLimits());
         dto.setHasFreeTime(parkingLot.isHasFreeTime());
-        dto.setAllowExtensions(parkingLot.isAllowExtensions());
+        dto.setAllowExtensionsForRegular(parkingLot.isAllowExtensionsForRegular());
+        dto.setAllowExtensionsForOnTheSpot(parkingLot.isAllowExtensionsForOnTheSpot());
         dto.setAllowCancellations(parkingLot.isAllowCancellations());
         dto.setAllowPreReservationCancellations(parkingLot.isAllowPreReservationCancellations());
         dto.setApplyPreCancelFee(parkingLot.isApplyPreCancelFee());
@@ -78,7 +81,8 @@ public class ParkingLotMapper {
         dto.setTimeAfterReservationUnit(parkingLot.getTimeAfterReservationUnit());
         dto.setParkingAvailabilityMethod(parkingLot.getParkingAvailabilityMethod());
         dto.setPricingType(parkingLot.getPricingType());
-        dto.setExtensionPricingModel(parkingLot.getExtensionPricingModel());
+        dto.setExtensionPricingModelForRegular(parkingLot.getExtensionPricingModelForRegular());
+        dto.setExtensionPricingModelForOnTheSpot(parkingLot.getExtensionPricingModelForOnTheSpot());
         dto.setStatus(parkingLot.getStatus());
 
         // Direct collection of enums
@@ -146,8 +150,10 @@ public class ParkingLotMapper {
         if (dto.getFreeTimeMinutes() != null) entity.setFreeTimeMinutes(dto.getFreeTimeMinutes());
         if (dto.getBankAccountName() != null) entity.setBankAccountName(dto.getBankAccountName());
         if (dto.getBankAccountNumber() != null) entity.setBankAccountNumber(dto.getBankAccountNumber());
-        if (dto.getMaxExtensionTime() != null) entity.setMaxExtensionTime(dto.getMaxExtensionTime());
-        if (dto.getExtensionPricingPercentage() != null) entity.setExtensionPricingPercentage(dto.getExtensionPricingPercentage());
+        if (dto.getMaxExtensionTimeForRegular() != null) entity.setMaxExtensionTimeForRegular(dto.getMaxExtensionTimeForRegular());
+        if (dto.getExtensionPricingPercentageForRegular() != null) entity.setExtensionPricingPercentageForRegular(dto.getExtensionPricingPercentageForRegular());
+        if (dto.getMaxExtensionTimeForOnTheSpot() != null) entity.setMaxExtensionTimeForOnTheSpot(dto.getMaxExtensionTimeForOnTheSpot());
+        if (dto.getExtensionPricingPercentageForOnTheSpot() != null) entity.setExtensionPricingPercentageForOnTheSpot(dto.getExtensionPricingPercentageForOnTheSpot());
         if (dto.getPreReservationCancelWindow() != null) entity.setPreReservationCancelWindow(dto.getPreReservationCancelWindow());
         if (dto.getPreReservationCancelFee() != null) entity.setPreReservationCancelFee(dto.getPreReservationCancelFee());
         if (dto.getMidReservationCancelWindow() != null) entity.setMidReservationCancelWindow(dto.getMidReservationCancelWindow());
@@ -164,7 +170,8 @@ public class ParkingLotMapper {
         entity.setDisplayFees(dto.isDisplayFees());
         entity.setHasTimeLimits(dto.isHasTimeLimits());
         entity.setHasFreeTime(dto.isHasFreeTime());
-        entity.setAllowExtensions(dto.isAllowExtensions());
+        entity.setAllowExtensionsForRegular(dto.isAllowExtensionsForRegular());
+        entity.setAllowExtensionsForOnTheSpot(dto.isAllowExtensionsForOnTheSpot());
         entity.setAllowCancellations(dto.isAllowCancellations());
         entity.setAllowPreReservationCancellations(dto.isAllowPreReservationCancellations());
         entity.setApplyPreCancelFee(dto.isApplyPreCancelFee());
@@ -181,7 +188,8 @@ public class ParkingLotMapper {
         if (dto.getTimeAfterReservationUnit() != null) entity.setTimeAfterReservationUnit(dto.getTimeAfterReservationUnit());
         if (dto.getParkingAvailabilityMethod() != null) entity.setParkingAvailabilityMethod(dto.getParkingAvailabilityMethod());
         if (dto.getPricingType() != null) entity.setPricingType(dto.getPricingType());
-        if (dto.getExtensionPricingModel() != null) entity.setExtensionPricingModel(dto.getExtensionPricingModel());
+        if (dto.getExtensionPricingModelForRegular() != null) entity.setExtensionPricingModelForRegular(dto.getExtensionPricingModelForRegular());
+        if (dto.getExtensionPricingModelForOnTheSpot() != null) entity.setExtensionPricingModelForOnTheSpot(dto.getExtensionPricingModelForOnTheSpot());
         if (dto.getStatus() != null) entity.setStatus(dto.getStatus());
 
         if (dto.getTypes() != null && !dto.getTypes().isEmpty()) {

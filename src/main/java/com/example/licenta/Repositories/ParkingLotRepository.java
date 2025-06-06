@@ -19,6 +19,7 @@ public interface ParkingLotRepository extends JpaRepository<ParkingLot, String> 
     Page<ParkingLot> findByOwner(User owner, Pageable pageable);
     Page<ParkingLot> findByAllowDirectPaymentTrue(Pageable pageable);
     List<ParkingLot> findByStatus(ParkingLotStatus status);
+    List<ParkingLot> findByOwner(User owner);
 
     Page<ParkingLot> findByAllowReservationsTrue(Pageable pageable);
 

@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
-import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -254,5 +253,84 @@ public class EmailService {
             logger.error("Failed to send {} email to: {}. Error: {}", subject, to, e.getMessage(), e); // Added exception to log
             return false;
         }
+    }
+
+    public boolean sendWithdrawalConfirmationEmail(String toEmail, String withdrawalId, Double withdrawnAmount,
+                                                   String bankAccountNumber, String parkingLotName) {
+        String subject = appName + ": Withdrawal Processed Successfully";
+
+        // Format the current date and time for display
+        String processedDate = formatDateTimeForEmail(OffsetDateTime.now());
+
+        // Mask the bank account number for security (show only last 4 digits)
+        String maskedBankAccount = "****" + bankAccountNumber.substring(Math.max(0, bankAccountNumber.length() - 4));
+
+        String htmlContent =
+                "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;'>" +
+                        "<div style='text-align: center; margin-bottom: 20px;'>" +
+                        "<h1 style='color: #4a6cf7;'>" + appName + "</h1>" +
+                        "</div>" +
+                        "<div style='background-color: #f0f8ff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #22C55E;'>" +
+                        "<h2 style='margin-top: 0; color: #22C55E;'>✅ Withdrawal Processed Successfully!</h2>" +
+                        "<p style='color: #555; line-height: 1.6; font-size: 16px;'>Great news! Your withdrawal request has been processed and the funds are on their way to your bank account.</p>" +
+                        "</div>" +
+
+                        "<div style='background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px;'>" +
+                        "<h3 style='margin-top: 0; color: #333; border-bottom: 2px solid #4a6cf7; padding-bottom: 10px;'>Withdrawal Details</h3>" +
+                        "<div style='display: flex; flex-direction: column; gap: 12px;'>" +
+                        "<div style='display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;'>" +
+                        "<span style='color: #666; font-weight: 500;'>Withdrawal ID:</span>" +
+                        "<span style='color: #333; font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;'>" + withdrawalId + "</span>" +
+                        "</div>" +
+                        "<div style='display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;'>" +
+                        "<span style='color: #666; font-weight: 500;'>Amount:</span>" +
+                        "<span style='color: #22C55E; font-weight: bold; font-size: 18px;'>" + String.format("%.2f", withdrawnAmount) + " RON</span>" +
+                        "</div>" +
+                        "<div style='display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;'>" +
+                        "<span style='color: #666; font-weight: 500;'>Parking Lot:</span>" +
+                        "<span style='color: #333; font-weight: 500;'>" + parkingLotName + "</span>" +
+                        "</div>" +
+                        "<div style='display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;'>" +
+                        "<span style='color: #666; font-weight: 500;'>Bank Account:</span>" +
+                        "<span style='color: #333; font-family: monospace;'>" + maskedBankAccount + "</span>" +
+                        "</div>" +
+                        "<div style='display: flex; justify-content: space-between; padding: 8px 0;'>" +
+                        "<span style='color: #666; font-weight: 500;'>Processed At:</span>" +
+                        "<span style='color: #333;'>" + processedDate + " (GMT+03:00)</span>" +
+                        "</div>" +
+                        "</div>" +
+                        "</div>" +
+
+                        "<div style='background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin-bottom: 20px;'>" +
+                        "<h4 style='margin-top: 0; color: #856404;'>📋 What happens next?</h4>" +
+                        "<ul style='color: #856404; margin: 0; padding-left: 20px; line-height: 1.6;'>" +
+                        "<li>The funds have been transferred to your registered bank account</li>" +
+                        "<li>Depending on your bank, it may take <strong>1-3 business days</strong> for the transfer to appear</li>" +
+                        "<li>You will receive a notification from your bank once the funds arrive</li>" +
+                        "<li>Your pending earnings balance has been updated in your " + appName + " account</li>" +
+                        "</ul>" +
+                        "</div>" +
+
+                        "<div style='background-color: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px; padding: 15px; margin-bottom: 20px;'>" +
+                        "<h4 style='margin-top: 0; color: #2d5a2d;'>💡 Need Help?</h4>" +
+                        "<p style='color: #2d5a2d; margin: 0; line-height: 1.6;'>" +
+                        "If you don't see the funds in your account after 3 business days, or if you have any questions about this withdrawal, " +
+                        "please contact our support team with your withdrawal ID: <strong>" + withdrawalId + "</strong>" +
+                        "</p>" +
+                        "</div>" +
+
+                        "<div style='text-align: center; margin: 30px 0;'>" +
+                        "<a href='" + frontendUrl + "/dashboard' style='background-color: #4a6cf7; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;'>View Dashboard</a>" +
+                        "</div>" +
+
+                        "<div style='color: #999; font-size: 12px; text-align: center; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;'>" +
+                        "<p style='margin: 5px 0;'>This is an automated message confirming your withdrawal request.</p>" +
+                        "<p style='margin: 5px 0;'>Please do not reply directly to this email.</p>" +
+                        "<p style='margin: 5px 0;'>For support inquiries, please contact us through the app or our website.</p>" +
+                        "<p style='margin: 15px 0 5px 0;'>&copy; " + java.time.Year.now().getValue() + " " + appName + ". All rights reserved.</p>" +
+                        "</div>" +
+                        "</div>";
+
+        return sendHtmlEmail(toEmail, subject, htmlContent);
     }
 }

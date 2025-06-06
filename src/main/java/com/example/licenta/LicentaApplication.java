@@ -14,7 +14,7 @@ public class LicentaApplication {
 		SpringApplication.run(LicentaApplication.class, args);
 	}
 
-	@Bean // Define RestTemplate as a Spring-managed bean
+	@Bean
 	public RestTemplate restTemplate() {
 		return new RestTemplate();
 	}

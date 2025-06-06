@@ -73,6 +73,9 @@ public class ParkingLotDTO {
     @Enumerated(EnumType.STRING)
     private AvailabilityType availability;
 
+    @Valid
+    private List<@Valid CustomHourIntervalDTO> customHourIntervals;
+
     private boolean allowReservations;
 
     @Enumerated(EnumType.STRING)
@@ -115,17 +118,24 @@ public class ParkingLotDTO {
     private boolean hasFreeTime;
     private Integer freeTimeMinutes;
 
+    @Valid
+    private List<@Valid PriceIntervalDTO> priceIntervals;
+
     @Size(max = 100, message = "Bank account name must be less than 100 characters")
     private String bankAccountName;
-
     private String bankAccountNumber;
 
-    private boolean allowExtensions;
-    private Integer maxExtensionTime;
-
+    private boolean allowExtensionsForRegular;
+    private Integer maxExtensionTimeForRegular;
     @Enumerated(EnumType.STRING)
-    private ExtensionPricingModel extensionPricingModel;
-    private Double extensionPricingPercentage;
+    private ExtensionPricingModel extensionPricingModelForRegular;
+    private Double extensionPricingPercentageForRegular;
+
+    private boolean allowExtensionsForOnTheSpot;
+    private Integer maxExtensionTimeForOnTheSpot;
+    @Enumerated(EnumType.STRING)
+    private ExtensionPricingModel extensionPricingModelForOnTheSpot;
+    private Double extensionPricingPercentageForOnTheSpot;
 
     private boolean allowCancellations;
     private boolean allowPreReservationCancellations;
@@ -145,9 +155,4 @@ public class ParkingLotDTO {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
-    @Valid
-    private List<@Valid CustomHourIntervalDTO> customHourIntervals;
-
-    @Valid
-    private List<@Valid PriceIntervalDTO> priceIntervals;
 }

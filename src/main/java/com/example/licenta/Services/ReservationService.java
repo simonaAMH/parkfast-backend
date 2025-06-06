@@ -648,7 +648,7 @@ public class ReservationService {
         parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking Lot not found with ID: " + parkingLotId));
 
-        Page<Review> reviewsPage = reviewRepository.findReviewsByParkingLotId(parkingLotId, pageable);
+        Page<Review> reviewsPage = reviewRepository.findByReservationParkingLotId(parkingLotId, pageable);
 
         List<ReviewDTO> reviewDTOs = reviewsPage.getContent().stream()
                 .map(review -> ReviewDTO.builder()
@@ -685,7 +685,7 @@ public class ReservationService {
             throw new ResourceNotFoundException("Parking lot cannot be null for rating recalculation.");
         }
 
-        List<Review> reviews = reviewRepository.findAllByReservationParkingLotId(parkingLot.getId());
+        List<Review> reviews = reviewRepository.findByReservationParkingLotId(parkingLot.getId());
 
         if (reviews.isEmpty()) {
             parkingLot.setAverageRating(0.0);

@@ -39,6 +39,10 @@ public class ParkingLot {
     @Enumerated(EnumType.STRING)
     private ParkingLotCategory category;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    private User owner;
+
     @ElementCollection
     @CollectionTable(name = "parking_lot_types", joinColumns = @JoinColumn(name = "parking_lot_id"))
     @Enumerated(EnumType.STRING)
@@ -56,6 +60,9 @@ public class ParkingLot {
 
     @Column(name = "has_video_surveillance")
     private boolean hasVideoSurveillance;
+
+    @Column(name = "average_rating")
+    private Double averageRating = 0.0;
 
     @ElementCollection
     @CollectionTable(name = "parking_lot_photos", joinColumns = @JoinColumn(name = "parking_lot_id"))
@@ -163,18 +170,31 @@ public class ParkingLot {
     @Column(name = "bank_account_number")
     private String bankAccountNumber;
 
-    @Column(name = "allow_extensions")
-    private boolean allowExtensions;
+    @Column(name = "allow_extensions_for_regular")
+    private boolean allowExtensionsForRegular;
 
-    @Column(name = "max_extension_time")
-    private Integer maxExtensionTime;
+    @Column(name = "max_extension_time_for_regular")
+    private Integer maxExtensionTimeForRegular;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "extension_pricing_model")
-    private ExtensionPricingModel extensionPricingModel;
+    @Column(name = "extension_pricing_model_for_regular")
+    private ExtensionPricingModel extensionPricingModelForRegular;
 
-    @Column(name = "extension_pricing_percentage")
-    private Double extensionPricingPercentage;
+    @Column(name = "extension_pricing_percentage_for_regular")
+    private Double extensionPricingPercentageForRegular;
+
+    @Column(name = "allow_extensions_for_on_the_spot")
+    private boolean allowExtensionsForOnTheSpot;
+
+    @Column(name = "max_extension_time_for_on_the_spot")
+    private Integer maxExtensionTimeForOnTheSpot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "extension_pricing_model_for_on_the_spot")
+    private ExtensionPricingModel extensionPricingModelForOnTheSpot;
+
+    @Column(name = "extension_pricing_percentage_for_on_the_spot")
+    private Double extensionPricingPercentageForOnTheSpot;
 
     @Column(name = "allow_cancellations")
     private boolean allowCancellations;
@@ -208,13 +228,6 @@ public class ParkingLot {
 
     @Column(name = "spots_available")
     private Integer spotsAvailable;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id")
-    private User owner;
-
-    @Column(name = "average_rating")
-    private Double averageRating = 0.0;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;

@@ -8,8 +8,9 @@ import com.example.licenta.Models.UserPaymentMethod;
 import com.example.licenta.Models.UserVehiclePlate;
 import com.example.licenta.Services.UserService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Min;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -373,6 +374,97 @@ public class UserController {
                 "Payment method deleted successfully",
                 null
         );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{userId}/withdrawals")
+    public ResponseEntity<ApiResponse<WithdrawalResponseDTO>> requestWithdrawal(
+            @PathVariable String userId,
+            @Valid @RequestBody WithdrawalRequestDTO withdrawalRequest) {
+
+        User currentUser = userService.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+
+        if (!currentUser.getId().equals(userId)) {
+            throw new InvalidDataException("You can only request withdrawals for your own account");
+        }
+
+        WithdrawalResponseDTO withdrawal = userService.requestWithdrawal(userId, withdrawalRequest);
+
+        ApiResponse<WithdrawalResponseDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.CREATED.value(),
+                "Withdrawal request submitted successfully",
+                withdrawal
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{userId}/withdrawals")
+    public ResponseEntity<ApiResponse<Page<WithdrawalResponseDTO>>> getUserWithdrawals(
+            @PathVariable String userId,
+            Pageable pageable) {
+
+        User currentUser = userService.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+
+        if (!currentUser.getId().equals(userId)) {
+            throw new InvalidDataException("You can only view your own withdrawals");
+        }
+
+        Page<WithdrawalResponseDTO> withdrawals = userService.getUserWithdrawals(userId, pageable);
+
+        ApiResponse<Page<WithdrawalResponseDTO>> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Withdrawals retrieved successfully",
+                withdrawals
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{userId}/withdrawal-summary")
+    public ResponseEntity<ApiResponse<WithdrawalSummaryDTO>> getWithdrawalSummary(
+            @PathVariable String userId) {
+
+        User currentUser = userService.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+
+        if (!currentUser.getId().equals(userId)) {
+            throw new InvalidDataException("You can only view your own withdrawal summary");
+        }
+
+        WithdrawalSummaryDTO summary = userService.getWithdrawalSummary(userId);
+
+        ApiResponse<WithdrawalSummaryDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Withdrawal summary retrieved successfully",
+                summary
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{userId}/withdrawals/{withdrawalId}")
+    public ResponseEntity<ApiResponse<WithdrawalResponseDTO>> getWithdrawalById(
+            @PathVariable String userId,
+            @PathVariable String withdrawalId) {
+
+        User currentUser = userService.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+
+        WithdrawalResponseDTO withdrawal = userService.getWithdrawalById(userId, withdrawalId);
+
+        ApiResponse<WithdrawalResponseDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Withdrawal details retrieved successfully",
+                withdrawal
+        );
+
         return ResponseEntity.ok(response);
     }
 
