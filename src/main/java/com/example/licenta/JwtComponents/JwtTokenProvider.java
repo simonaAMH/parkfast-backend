@@ -27,37 +27,11 @@ public class JwtTokenProvider {
     @Value("${app.jwtExpirationInMs}")
     private int jwtExpirationInMs;
 
-    @Value("${app.jwtRememberMeExpirationInMs}")
+    @Value("${app.jwtRememberMeExpirationInMs}") //7 days
     private int jwtRememberMeExpirationInMs;
 
-    @Value("${app.refreshTokenExpirationInMs:604800000}") // Default 7 days
+    @Value("${app.refreshTokenExpirationInMs}") //7 days
     private int refreshTokenExpirationInMs;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    public String generateToken(Authentication authentication, boolean rememberMe) {
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-
-        // Look up the user by username instead of casting
-        String username = userDetails.getUsername();
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
-
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + (rememberMe ? jwtRememberMeExpirationInMs : jwtExpirationInMs));
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("username", username);
-
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(String.valueOf(user.getId()))
-                .setIssuedAt(new Date())
-                .setExpiration(expiryDate)
-                .signWith(SignatureAlgorithm.HS512, jwtSecret)
-                .compact();
-    }
 
     public String generateTokenFromUser(User user, boolean rememberMe) {
         Date now = new Date();
@@ -72,7 +46,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(String.valueOf(user.getId())) // Use ID as subject
+                .setSubject(String.valueOf(user.getId()))
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(SignatureAlgorithm.HS512, jwtSecret)

@@ -43,9 +43,13 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public ParkingLot createParkingLot(ParkingLotDTO dto, String ownerId) {
-        User owner = userRepository.findById(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + ownerId));
+    public ParkingLot createParkingLot(ParkingLotDTO dto, String authenticatedUserId) {
+        User owner = userRepository.findById(authenticatedUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + authenticatedUserId));
+
+        if (!dto.getOwnerId().equals(authenticatedUserId)) {
+            throw new InvalidCredentialsException("You don't have permission to update this parking lot");
+        }
 
         ParkingLot parkingLot = parkingLotMapper.toEntity(dto);
         parkingLot.setOwner(owner);
@@ -59,11 +63,11 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public ParkingLot updateParkingLot(String parkingLotId, ParkingLotDTO dto, String userId) {
+    public ParkingLot updateParkingLot(String parkingLotId, ParkingLotDTO dto, String authenticatedUserId) {
         ParkingLot existingParkingLot = parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found with ID: " + parkingLotId));
 
-        if (!existingParkingLot.getOwner().getId().equals(userId)) {
+        if (!existingParkingLot.getOwner().getId().equals(authenticatedUserId)) {
             throw new InvalidCredentialsException("You don't have permission to update this parking lot");
         }
 
@@ -74,11 +78,11 @@ public class ParkingLotService {
     }
 
     @Transactional
-    public void deleteParkingLot(String parkingLotId, String userId) {
+    public void deleteParkingLot(String parkingLotId, String authenticatedUserId) {
         ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found with ID: " + parkingLotId));
 
-        if (!parkingLot.getOwner().getId().equals(userId)) {
+        if (!parkingLot.getOwner().getId().equals(authenticatedUserId)) {
             throw new InvalidCredentialsException("You don't have permission to delete this parking lot");
         }
 
@@ -94,6 +98,13 @@ public class ParkingLotService {
         }
 
         parkingLotRepository.delete(parkingLot);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ParkingLot> getParkingLotsByOwnerId(String ownerId, Pageable pageable) {
+         userRepository.findById(ownerId)
+                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + ownerId));
+        return parkingLotRepository.findByOwnerId(ownerId, pageable);
     }
 
     @Transactional(readOnly = true)

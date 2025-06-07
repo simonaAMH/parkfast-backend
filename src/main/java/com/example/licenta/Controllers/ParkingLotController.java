@@ -6,6 +6,8 @@ import com.example.licenta.DTOs.ParkingLotDTO;
 import com.example.licenta.DTOs.ReviewDTO;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Exceptions.InvalidDataException;
+import com.example.licenta.JwtComponents.CurrentUser;
+import com.example.licenta.JwtComponents.UserPrincipal;
 import com.example.licenta.Mappers.ParkingLotMapper;
 import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.User;
@@ -112,12 +114,41 @@ public class ParkingLotController {
         }
     }
 
-        @PostMapping
-    public ResponseEntity<ApiResponse<?>> createParkingLot(@Valid @RequestBody ParkingLotDTO parkingLotDTO) {
-        ParkingLot parkingLot = parkingLotService.createParkingLot(parkingLotDTO, parkingLotDTO.getOwnerId());
+    @PostMapping
+    public ResponseEntity<ApiResponse<?>> createParkingLot(
+            @Valid @RequestBody ParkingLotDTO parkingLotDTO,
+            @CurrentUser UserPrincipal currentUser) {
+        ParkingLot parkingLot = parkingLotService.createParkingLot(parkingLotDTO, currentUser.getId());
         ParkingLotDTO responseDTO = parkingLotMapper.toDTO(parkingLot);
         ApiResponse<ParkingLotDTO> response = new ApiResponse<>(true, HttpStatus.CREATED.value(), "Parking lot created successfully", responseDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/my-lots")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMyParkingLots(
+            @CurrentUser UserPrincipal currentUser,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction) {
+
+
+        Sort.Direction sortDirection = direction.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortBy));
+        Page<ParkingLot> parkingLotsPage = parkingLotService.getParkingLotsByOwnerId(currentUser.getId(), pageable);
+
+        List<ParkingLotDTO> parkingLotDTOs = parkingLotsPage.getContent().stream()
+                .map(parkingLotMapper::toDTO)
+                .collect(Collectors.toList());
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("parkingLots", parkingLotDTOs);
+        responseData.put("currentPage", parkingLotsPage.getNumber());
+        responseData.put("totalItems", parkingLotsPage.getTotalElements());
+        responseData.put("totalPages", parkingLotsPage.getTotalPages());
+
+        ApiResponse<Map<String, Object>> response = new ApiResponse<>(true, HttpStatus.OK.value(), "My parking lots retrieved successfully", responseData);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping
@@ -210,18 +241,19 @@ public class ParkingLotController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> updateParkingLot(
             @PathVariable String id,
-            @Valid @RequestBody ParkingLotDTO parkingLotDTO) {
-        ParkingLot parkingLot = parkingLotService.getParkingLotById(id);
-        ParkingLot updatedParkingLot = parkingLotService.updateParkingLot(id, parkingLotDTO, parkingLot.getOwner().getId());
+            @Valid @RequestBody ParkingLotDTO parkingLotDTO,
+            @CurrentUser UserPrincipal currentUser) {
+        ParkingLot updatedParkingLot = parkingLotService.updateParkingLot(id, parkingLotDTO, currentUser.getId());
         ParkingLotDTO responseDTO = parkingLotMapper.toDTO(updatedParkingLot);
         ApiResponse<ParkingLotDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Parking lot updated successfully", responseDTO);
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<?>> deleteParkingLot(@PathVariable String id) {
-        ParkingLot parkingLot = parkingLotService.getParkingLotById(id);
-        parkingLotService.deleteParkingLot(id, parkingLot.getOwner().getId());
+    public ResponseEntity<ApiResponse<?>> deleteParkingLot(
+            @PathVariable String id,
+            @CurrentUser UserPrincipal currentUser) {
+        parkingLotService.deleteParkingLot(id, currentUser.getId());
         ApiResponse<Void> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Parking lot deleted successfully", null);
         return ResponseEntity.ok(response);
     }
