@@ -437,7 +437,7 @@ public class ReservationService {
             return guestAccessTokenRepository.save(newToken);
         }
     }
-
+    
     @Transactional
     public ReservationDTO handlePayment(String reservationId, PaymentRequestDTO paymentRequest) {
         Reservation reservation = reservationRepository.findById(reservationId)
