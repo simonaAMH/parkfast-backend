@@ -90,6 +90,18 @@ public class Reservation {
     @OneToOne(mappedBy = "reservation", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Review review;
 
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
+    @Column(name = "stripe_payment_method_id")
+    private String stripePaymentMethodId;
+
+    @Column(name = "stripe_setup_intent_id")
+    private String stripeSetupIntentId;
+
+    @Column(name = "stripe_payment_intent_id")
+    private String stripePaymentIntentId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 

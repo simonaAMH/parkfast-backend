@@ -89,6 +89,9 @@ public class User {
     @Column(name = "current_parking_lot_id")
     private String currentParkingLotId;
 
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();

@@ -1,9 +1,13 @@
 package com.example.licenta.Services;
 
 import com.example.licenta.Exceptions.PaymentProcessingException;
+import com.example.licenta.Models.StripeIntentResponse;
+import com.example.licenta.Models.User;
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.*;
 import com.stripe.net.RequestOptions;
+import com.stripe.net.Webhook;
 import com.stripe.param.*;
 import org.springframework.stereotype.Service;
 
@@ -233,7 +237,7 @@ public class StripeService {
         if (metadata != null && !metadata.isEmpty()) {
             paramsBuilder.putAllMetadata(metadata);
         }
-        if (transferGroup != null && !transferGroup.isEmpty()){
+        if (transferGroup != null && !transferGroup.isEmpty()) {
             paramsBuilder.setTransferGroup(transferGroup);
         }
 
@@ -241,7 +245,6 @@ public class StripeService {
         System.out.println("StripeService: Created Transfer ID: " + transfer.getId() + " to Connected Account ID: " + destinationConnectedAccountId);
         return transfer;
     }
-
 
     public Charge createPlatformCharge(long amount, String description) throws StripeException {
         Map<String, Object> chargeParams = new HashMap<>();
@@ -258,5 +261,102 @@ public class StripeService {
         Charge charge = Charge.create(chargeParams, requestOptions);
         System.out.println("StripeService: Successfully created platform Charge ID: " + charge.getId() + ", Status: " + charge.getStatus());
         return charge;
+    }
+
+    public String getOrCreateStripeCustomerId(User user, String guestEmail) throws StripeException {
+        if (user != null && user.getStripeCustomerId() != null && !user.getStripeCustomerId().isEmpty()) {
+            try {
+                Customer.retrieve(user.getStripeCustomerId());
+                return user.getStripeCustomerId();
+            } catch (StripeException e) {
+                if (!"resource_missing".equals(e.getCode())) {
+                    throw e;
+                }
+            }
+        }
+        CustomerCreateParams.Builder customerParamsBuilder = CustomerCreateParams.builder();
+        if (user != null) {
+            customerParamsBuilder.setEmail(user.getEmail());
+            customerParamsBuilder.setName(user.getUsername());
+            customerParamsBuilder.putMetadata("internal_user_id", user.getId());
+        } else if (guestEmail != null && !guestEmail.isEmpty()) {
+            customerParamsBuilder.setEmail(guestEmail);
+        } else {
+            customerParamsBuilder.setDescription("Guest Customer " + UUID.randomUUID().toString());
+        }
+        Customer customer = Customer.create(customerParamsBuilder.build());
+        return customer.getId();
+    }
+
+    public StripeIntentResponse createSetupIntent(String stripeCustomerId, Map<String, String> metadata) throws StripeException {
+        SetupIntentCreateParams.Builder paramsBuilder = SetupIntentCreateParams.builder()
+                .setCustomer(stripeCustomerId)
+                .addPaymentMethodType("card")
+                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION);
+        if (metadata != null && !metadata.isEmpty()) {
+            paramsBuilder.putAllMetadata(metadata);
+        }
+        SetupIntent setupIntent = SetupIntent.create(paramsBuilder.build());
+        return new StripeIntentResponse(setupIntent.getClientSecret(), setupIntent.getId(), setupIntent.getStatus());
+    }
+
+    public StripeIntentResponse createPaymentIntent(
+            long amountInSmallestUnit, String currency, String stripeCustomerId,
+            String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt) throws StripeException {
+        PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
+                .setAmount(amountInSmallestUnit)
+                .setCurrency(currency.toLowerCase())
+                .setCustomer(stripeCustomerId)
+                .setAutomaticPaymentMethods(PaymentIntentCreateParams.AutomaticPaymentMethods.builder().setEnabled(true).build());
+        if (metadata != null && !metadata.isEmpty()) {
+            paramsBuilder.putAllMetadata(metadata);
+        }
+        if (paymentMethodId != null && !paymentMethodId.isEmpty()) {
+            paramsBuilder.setPaymentMethod(paymentMethodId);
+            if (offSessionAttempt) {
+                paramsBuilder.setOffSession(true);
+                paramsBuilder.setConfirm(true);
+            }
+        } else if (offSessionAttempt) {
+            paramsBuilder.setOffSession(true);
+            paramsBuilder.setConfirm(true);
+        }
+        RequestOptions requestOptions = RequestOptions.builder().setIdempotencyKey("pi-" + UUID.randomUUID().toString()).build();
+        PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
+        return new StripeIntentResponse(paymentIntent.getClientSecret(), paymentIntent.getId(), paymentIntent.getStatus());
+    }
+
+    public PaymentMethod attachPaymentMethodToCustomer(String paymentMethodId, String stripeCustomerId) throws StripeException {
+        PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+        PaymentMethodAttachParams params = PaymentMethodAttachParams.builder().setCustomer(stripeCustomerId).build();
+        return paymentMethod.attach(params);
+    }
+
+    public void setDefaultPaymentMethodForCustomer(String stripeCustomerId, String paymentMethodId) throws StripeException {
+        CustomerUpdateParams params = CustomerUpdateParams.builder()
+                .setInvoiceSettings(CustomerUpdateParams.InvoiceSettings.builder().setDefaultPaymentMethod(paymentMethodId).build())
+                .build();
+        Customer customer = Customer.retrieve(stripeCustomerId);
+        customer.update(params);
+    }
+
+    public PaymentIntent retrievePaymentIntent(String paymentIntentId) throws StripeException {
+        return PaymentIntent.retrieve(paymentIntentId);
+    }
+
+    public SetupIntent retrieveSetupIntent(String setupIntentId) throws StripeException {
+        return SetupIntent.retrieve(setupIntentId);
+    }
+
+    public Event constructEvent(String payload, String sigHeader) {
+        String webhookSecret = System.getenv("STRIPE_WEBHOOK_SECRET");
+        if (webhookSecret == null || webhookSecret.isEmpty()) {
+            throw new PaymentProcessingException("Webhook secret not configured, cannot process event.");
+        }
+        try {
+            return Webhook.constructEvent(payload, sigHeader, webhookSecret);
+        } catch (SignatureVerificationException e) {
+            throw new PaymentProcessingException("Webhook signature verification failed.");
+        }
     }
 }

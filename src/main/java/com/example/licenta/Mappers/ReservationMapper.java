@@ -42,6 +42,11 @@ public class ReservationMapper {
         dto.setCreatedAt(reservation.getCreatedAt());
         dto.setUpdatedAt(reservation.getUpdatedAt());
 
+        dto.setStripeSetupIntentId(reservation.getStripeSetupIntentId());
+        dto.setStripePaymentIntentId(reservation.getStripePaymentIntentId());
+        dto.setStripePaymentMethodId(reservation.getStripePaymentMethodId());
+        dto.setStripeCustomerId(reservation.getStripeCustomerId());
+
         return dto;
     }
 }

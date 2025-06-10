@@ -15,7 +15,6 @@ import java.util.Objects;
 
 public class UserPrincipal implements UserDetails {
     private String id;
-    private String name;
     private String username;
 
     @JsonIgnore
@@ -27,8 +26,6 @@ public class UserPrincipal implements UserDetails {
     private Role role;
 
     private Collection<? extends GrantedAuthority> authorities;
-
-    private Map<String, Object> attributes;
 
     public UserPrincipal(String id, String username, String email, String password, Role role,
                          Collection<? extends GrantedAuthority> authorities) {

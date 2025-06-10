@@ -16,7 +16,7 @@ public class ScheduledTasksService {
 
     // daily at 6 AM
     @Scheduled(cron = "0 0 6 * * ?")
-    public void reportCurrentTime() {
+    public void cleanupExpiredTokens() {
         reservationService.cleanupExpiredGuestAccessTokens();
     }
 }

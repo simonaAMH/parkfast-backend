@@ -29,6 +29,14 @@ public class ReservationDTO {
     private boolean hasCheckedOut;
     private String activeQrToken;
     private OffsetDateTime qrTokenExpiry;
+
+    private String stripeClientSecret;
+    private String stripeOperationType; // e.g., "SETUP_INTENT", "PAYMENT_INTENT", "PAYMENT_INTENT_REQUIRES_ACTION"
+    private String stripeCustomerId;
+    private String stripePaymentMethodId;
+    private String stripeSetupIntentId;
+    private String stripePaymentIntentId;
+
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

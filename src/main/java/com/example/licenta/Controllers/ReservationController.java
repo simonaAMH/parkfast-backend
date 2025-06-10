@@ -6,6 +6,7 @@ import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.JwtComponents.JwtAuthenticationFilter;
 import com.example.licenta.Services.ReservationService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -291,6 +292,57 @@ public class ReservationController {
                 "QR token generated successfully.",
                 qrTokenResponse
         );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{reservationId}/activate-pay-for-usage")
+    public ResponseEntity<ApiResponse<ReservationDTO>> activatePayForUsage(@PathVariable String reservationId) {
+        ReservationDTO reservationDTO = reservationService.activatePayForUsageReservation(reservationId);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage activation initiated. Proceed with card setup.", reservationDTO);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{reservationId}/save-payment-method")
+    public ResponseEntity<ApiResponse<ReservationDTO>> savePayForUsagePaymentMethod(
+            @PathVariable String reservationId,
+            @RequestBody Map<String, String> payload) {
+        String stripePaymentMethodId = payload.get("stripePaymentMethodId");
+        if (stripePaymentMethodId == null || stripePaymentMethodId.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ApiResponse<>(false, HttpStatus.BAD_REQUEST.value(), "stripePaymentMethodId is required.", null));
+        }
+        ReservationDTO reservationDTO = reservationService.savePayForUsagePaymentMethod(reservationId, stripePaymentMethodId);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Payment method saved and Pay for Usage activated.", reservationDTO);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{reservationId}/process-standard-direct-payment")
+    public ResponseEntity<ApiResponse<ReservationDTO>> processStandardOrDirectPayment(
+            @PathVariable String reservationId,
+            @Valid @RequestBody(required = false) PaymentRequestDTO paymentRequest) {
+        ReservationDTO reservationDTO = reservationService.processStandardOrDirectPayment(reservationId, paymentRequest != null ? paymentRequest : new PaymentRequestDTO());
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Payment initiated for Standard/Direct reservation. Confirm with Stripe.", reservationDTO);
+        return ResponseEntity.ok(response);
+    }
+
+    public static class EndPayForUsageRequest {
+        @NotNull
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        private OffsetDateTime endTime;
+        @NotNull
+        private Double totalAmount;
+
+        public OffsetDateTime getEndTime() { return endTime; }
+        public void setEndTime(OffsetDateTime endTime) { this.endTime = endTime; }
+        public Double getTotalAmount() { return totalAmount; }
+    }
+
+
+    @PostMapping("/{reservationId}/end-pay-for-usage")
+    public ResponseEntity<ApiResponse<ReservationDTO>> endPayForUsageAndInitiatePayment(
+            @PathVariable String reservationId,
+            @Valid @RequestBody EndPayForUsageRequest request) {
+        ReservationDTO reservationDTO = reservationService.endActivePayForUsageReservationAndInitiatePayment(reservationId, request.getEndTime(), request.getTotalAmount());
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage session ended. Payment initiated.", reservationDTO);
         return ResponseEntity.ok(response);
     }
 }
