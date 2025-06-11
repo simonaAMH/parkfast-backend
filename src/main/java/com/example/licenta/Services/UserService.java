@@ -107,9 +107,16 @@ public class UserService {
     public Optional<User> loginUser(String emailOrUsername, String password) {
         Optional<User> userOptional = userRepository.findByEmail(emailOrUsername)
                 .or(() -> userRepository.findByUsername(emailOrUsername));
+        
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
 
-        if (userOptional.isPresent() && passwordEncoder.matches(password, userOptional.get().getPassword())) {
-            return userOptional;
+            if (passwordEncoder.matches(password, user.getPassword())) {
+                if (!user.isEmailVerified()) {
+                    throw new InvalidDataException("Please verify your email address before logging in");
+                }
+                return userOptional;
+            }
         }
         return Optional.empty();
     }
