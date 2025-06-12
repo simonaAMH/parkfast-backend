@@ -7,6 +7,7 @@ import com.example.licenta.JwtComponents.JwtAuthenticationFilter;
 import com.example.licenta.Services.ReservationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -338,14 +339,13 @@ public class ReservationController {
 
     public static class EndPayForUsageRequest {
         @NotNull
+        @Getter
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         private OffsetDateTime endTime;
+
+        @Getter
         @NotNull
         private Double totalAmount;
-
-        public OffsetDateTime getEndTime() { return endTime; }
-        public void setEndTime(OffsetDateTime endTime) { this.endTime = endTime; }
-        public Double getTotalAmount() { return totalAmount; }
     }
 
 

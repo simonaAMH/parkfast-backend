@@ -183,45 +183,6 @@ public class StripeService {
         return updatedAccount;
     }
 
-    public Account updateConnectedAccountBusinessProfile(
-            String connectedAccountId,
-            String businessUrl,
-            String businessDescription,
-            String supportUrl,
-            String supportEmail,
-            String supportPhone) throws StripeException {
-
-        AccountUpdateParams.BusinessProfile.Builder businessProfileBuilder =
-                AccountUpdateParams.BusinessProfile.builder()
-                        .setUrl(businessUrl);
-
-        if (businessDescription != null && !businessDescription.isEmpty()) {
-            businessProfileBuilder.setMcc("7523"); // Default MCC for parking services
-            businessProfileBuilder.setName(businessDescription);
-        }
-
-        if (supportUrl != null && !supportUrl.isEmpty()) {
-            businessProfileBuilder.setSupportUrl(supportUrl);
-        }
-
-        if (supportEmail != null && !supportEmail.isEmpty()) {
-            businessProfileBuilder.setSupportEmail(supportEmail);
-        }
-
-        if (supportPhone != null && !supportPhone.isEmpty()) {
-            businessProfileBuilder.setSupportPhone(supportPhone);
-        }
-
-        AccountUpdateParams params = AccountUpdateParams.builder()
-                .setBusinessProfile(businessProfileBuilder.build())
-                .build();
-
-        Account account = Account.retrieve(connectedAccountId);
-        Account updatedAccount = account.update(params);
-        System.out.println("StripeService: Updated Business Profile for Connected Account ID: " + updatedAccount.getId());
-        return updatedAccount;
-    }
-
     public Transfer createTransferToDestination(
             long amount,
             String currency,
@@ -288,18 +249,6 @@ public class StripeService {
         return customer.getId();
     }
 
-    public StripeIntentResponse createSetupIntent(String stripeCustomerId, Map<String, String> metadata) throws StripeException {
-        SetupIntentCreateParams.Builder paramsBuilder = SetupIntentCreateParams.builder()
-                .setCustomer(stripeCustomerId)
-                .addPaymentMethodType("card")
-                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION);
-        if (metadata != null && !metadata.isEmpty()) {
-            paramsBuilder.putAllMetadata(metadata);
-        }
-        SetupIntent setupIntent = SetupIntent.create(paramsBuilder.build());
-        return new StripeIntentResponse(setupIntent.getClientSecret(), setupIntent.getId(), setupIntent.getStatus());
-    }
-
     public StripeIntentResponse createPaymentIntent(
             long amountInSmallestUnit, String currency, String stripeCustomerId,
             String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt,
@@ -339,6 +288,27 @@ public class StripeService {
             String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt
     ) throws StripeException {
         return createPaymentIntent(amountInSmallestUnit, currency, stripeCustomerId, paymentMethodId, metadata, offSessionAttempt, null);
+    }
+
+    public StripeIntentResponse createSetupIntent(String stripeCustomerId, Map<String, String> metadata) throws StripeException {
+        SetupIntentCreateParams params = SetupIntentCreateParams.builder()
+                .setCustomer(stripeCustomerId)
+                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION) // Or ON_SESSION if preferred for initial setup via PaymentSheet
+                .addPaymentMethodType("card") // You can add more types
+                .setAutomaticPaymentMethods(
+                        SetupIntentCreateParams.AutomaticPaymentMethods.builder()
+                                .setEnabled(true)
+                                .build()
+                ) // Recommended for future-proofing
+                .putAllMetadata(metadata)
+                .build();
+
+        SetupIntent setupIntent = SetupIntent.create(params);
+        return new StripeIntentResponse(setupIntent.getClientSecret(), setupIntent.getId(), setupIntent.getStatus());
+    }
+
+    public SetupIntent retrieveSetupIntent(String setupIntentId) throws StripeException {
+        return SetupIntent.retrieve(setupIntentId);
     }
 
     public PaymentMethod attachPaymentMethodToCustomer(String paymentMethodId, String stripeCustomerId) throws StripeException {
