@@ -294,7 +294,7 @@ public class StripeService {
         SetupIntentCreateParams params = SetupIntentCreateParams.builder()
                 .setCustomer(stripeCustomerId)
                 .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION) // Or ON_SESSION if preferred for initial setup via PaymentSheet
-                .addPaymentMethodType("card") // You can add more types
+                //.addPaymentMethodType("card") // You can add more types
                 .setAutomaticPaymentMethods(
                         SetupIntentCreateParams.AutomaticPaymentMethods.builder()
                                 .setEnabled(true)
