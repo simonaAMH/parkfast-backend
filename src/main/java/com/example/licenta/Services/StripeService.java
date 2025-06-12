@@ -302,28 +302,43 @@ public class StripeService {
 
     public StripeIntentResponse createPaymentIntent(
             long amountInSmallestUnit, String currency, String stripeCustomerId,
-            String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt) throws StripeException {
+            String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt,
+            String setupFutureUsage
+    ) throws StripeException {
         PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
                 .setAmount(amountInSmallestUnit)
                 .setCurrency(currency.toLowerCase())
                 .setCustomer(stripeCustomerId)
                 .setAutomaticPaymentMethods(PaymentIntentCreateParams.AutomaticPaymentMethods.builder().setEnabled(true).build());
+
         if (metadata != null && !metadata.isEmpty()) {
             paramsBuilder.putAllMetadata(metadata);
         }
+
         if (paymentMethodId != null && !paymentMethodId.isEmpty()) {
             paramsBuilder.setPaymentMethod(paymentMethodId);
             if (offSessionAttempt) {
                 paramsBuilder.setOffSession(true);
-                paramsBuilder.setConfirm(true);
             }
-        } else if (offSessionAttempt) {
-            paramsBuilder.setOffSession(true);
-            paramsBuilder.setConfirm(true);
+        }
+
+        if (setupFutureUsage != null && !setupFutureUsage.isEmpty()) {
+            try {
+                paramsBuilder.setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.valueOf(setupFutureUsage));
+            } catch (IllegalArgumentException e) {
+                System.err.println("Warning: Invalid setup_future_usage value: " + setupFutureUsage + ". Proceeding without it.");
+            }
         }
         RequestOptions requestOptions = RequestOptions.builder().setIdempotencyKey("pi-" + UUID.randomUUID().toString()).build();
         PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
         return new StripeIntentResponse(paymentIntent.getClientSecret(), paymentIntent.getId(), paymentIntent.getStatus());
+    }
+
+    public StripeIntentResponse createPaymentIntent(
+            long amountInSmallestUnit, String currency, String stripeCustomerId,
+            String paymentMethodId, Map<String, String> metadata, boolean offSessionAttempt
+    ) throws StripeException {
+        return createPaymentIntent(amountInSmallestUnit, currency, stripeCustomerId, paymentMethodId, metadata, offSessionAttempt, null);
     }
 
     public PaymentMethod attachPaymentMethodToCustomer(String paymentMethodId, String stripeCustomerId) throws StripeException {
@@ -344,19 +359,4 @@ public class StripeService {
         return PaymentIntent.retrieve(paymentIntentId);
     }
 
-    public SetupIntent retrieveSetupIntent(String setupIntentId) throws StripeException {
-        return SetupIntent.retrieve(setupIntentId);
-    }
-
-    public Event constructEvent(String payload, String sigHeader) {
-        String webhookSecret = System.getenv("STRIPE_WEBHOOK_SECRET");
-        if (webhookSecret == null || webhookSecret.isEmpty()) {
-            throw new PaymentProcessingException("Webhook secret not configured, cannot process event.");
-        }
-        try {
-            return Webhook.constructEvent(payload, sigHeader, webhookSecret);
-        } catch (SignatureVerificationException e) {
-            throw new PaymentProcessingException("Webhook signature verification failed.");
-        }
-    }
 }

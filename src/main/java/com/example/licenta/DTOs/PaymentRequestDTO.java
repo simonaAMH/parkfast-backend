@@ -9,4 +9,8 @@ public class PaymentRequestDTO {
     @DecimalMin(value = "0.0", message = "Points to use must be non-negative")
     private Double pointsToUse;
 
+
+    @Getter
+    private String setupFutureUsage;
+
 }
