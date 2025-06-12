@@ -295,6 +295,18 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/confirm-client-payment")
+    public ResponseEntity<ApiResponse<ReservationDTO>> confirmClientStripePaymentSuccess(@PathVariable String id) {
+        ReservationDTO updatedReservation = reservationService.confirmClientStripePaymentSuccess(id);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Client payment confirmation processed. Reservation updated.",
+                updatedReservation
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{reservationId}/activate-pay-for-usage")
     public ResponseEntity<ApiResponse<ReservationDTO>> activatePayForUsage(@PathVariable String reservationId) {
         ReservationDTO reservationDTO = reservationService.activatePayForUsageReservation(reservationId);
