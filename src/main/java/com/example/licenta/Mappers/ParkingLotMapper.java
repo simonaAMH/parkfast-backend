@@ -39,8 +39,6 @@ public class ParkingLotMapper {
         dto.setMinParkingDurationUnit(parkingLot.getMinParkingDurationUnit());
         dto.setMaxParkingDurationUnit(parkingLot.getMaxParkingDurationUnit());
         dto.setFreeTimeMinutes(parkingLot.getFreeTimeMinutes());
-        dto.setBankAccountName(parkingLot.getBankAccountName());
-        dto.setBankAccountNumber(parkingLot.getBankAccountNumber());
         dto.setMaxExtensionTimeForRegular(parkingLot.getMaxExtensionTimeForRegular());
         dto.setExtensionPricingPercentageForRegular(parkingLot.getExtensionPricingPercentageForRegular());
         dto.setMaxExtensionTimeForOnTheSpot(parkingLot.getMaxExtensionTimeForOnTheSpot());
@@ -148,8 +146,6 @@ public class ParkingLotMapper {
         if (dto.getMinParkingDurationUnit() != null) entity.setMinParkingDurationUnit(dto.getMinParkingDurationUnit());
         if (dto.getMaxParkingDurationUnit() != null) entity.setMaxParkingDurationUnit(dto.getMaxParkingDurationUnit());
         if (dto.getFreeTimeMinutes() != null) entity.setFreeTimeMinutes(dto.getFreeTimeMinutes());
-        if (dto.getBankAccountName() != null) entity.setBankAccountName(dto.getBankAccountName());
-        if (dto.getBankAccountNumber() != null) entity.setBankAccountNumber(dto.getBankAccountNumber());
         if (dto.getMaxExtensionTimeForRegular() != null) entity.setMaxExtensionTimeForRegular(dto.getMaxExtensionTimeForRegular());
         if (dto.getExtensionPricingPercentageForRegular() != null) entity.setExtensionPricingPercentageForRegular(dto.getExtensionPricingPercentageForRegular());
         if (dto.getMaxExtensionTimeForOnTheSpot() != null) entity.setMaxExtensionTimeForOnTheSpot(dto.getMaxExtensionTimeForOnTheSpot());

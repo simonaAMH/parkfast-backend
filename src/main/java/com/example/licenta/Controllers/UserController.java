@@ -4,7 +4,6 @@ import com.example.licenta.JwtComponents.JwtTokenProvider;
 import com.example.licenta.DTOs.*;
 import com.example.licenta.Exceptions.*;
 import com.example.licenta.Models.User;
-import com.example.licenta.Models.UserPaymentMethod;
 import com.example.licenta.Models.UserVehiclePlate;
 import com.example.licenta.Services.UserService;
 import jakarta.validation.Valid;
@@ -325,58 +324,6 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    // Payment Method endpoints
-    @PostMapping("/{userId}/payment-methods")
-    public ResponseEntity<ApiResponse<UserPaymentMethodDTO>> addPaymentMethod(
-            @PathVariable String userId,
-            @Valid @RequestBody UserPaymentMethodDTO methodDto) {
-
-        UserPaymentMethod savedMethod = userService.addPaymentMethod(userId, methodDto);
-        UserPaymentMethodDTO responseDto = convertToPaymentMethodDto(savedMethod);
-
-        ApiResponse<UserPaymentMethodDTO> response = new ApiResponse<>(
-                true,
-                HttpStatus.CREATED.value(),
-                "Payment method added successfully",
-                responseDto
-        );
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    @GetMapping("/{userId}/payment-methods")
-    public ResponseEntity<ApiResponse<List<UserPaymentMethodDTO>>> getPaymentMethods(
-            @PathVariable String userId) {
-
-        List<UserPaymentMethod> methods = userService.getPaymentMethods(userId);
-        List<UserPaymentMethodDTO> methodDtos = methods.stream()
-                .map(this::convertToPaymentMethodDto)
-                .collect(Collectors.toList());
-
-        ApiResponse<List<UserPaymentMethodDTO>> response = new ApiResponse<>(
-                true,
-                HttpStatus.OK.value(),
-                "Payment methods retrieved successfully",
-                methodDtos
-        );
-        return ResponseEntity.ok(response);
-    }
-
-    @DeleteMapping("/{userId}/payment-methods/{methodId}")
-    public ResponseEntity<ApiResponse<Void>> deletePaymentMethod(
-            @PathVariable String userId,
-            @PathVariable String methodId) {
-
-        userService.deletePaymentMethod(userId, methodId);
-
-        ApiResponse<Void> response = new ApiResponse<>(
-                true,
-                HttpStatus.OK.value(),
-                "Payment method deleted successfully",
-                null
-        );
-        return ResponseEntity.ok(response);
-    }
-
     @PostMapping("/{userId}/withdrawals")
     public ResponseEntity<ApiResponse<WithdrawalResponseDTO>> requestWithdrawal(
             @PathVariable String userId,
@@ -490,15 +437,6 @@ public class UserController {
         UserVehiclePlateDTO dto = new UserVehiclePlateDTO();
         dto.setId(plate.getId());
         dto.setPlateNumber(plate.getPlateNumber());
-        return dto;
-    }
-
-    private UserPaymentMethodDTO convertToPaymentMethodDto(UserPaymentMethod method) {
-        UserPaymentMethodDTO dto = new UserPaymentMethodDTO();
-        dto.setId(method.getId());
-        dto.setCardNumber(method.getCardNumber());
-        dto.setExpiryMonth(method.getExpiryMonth());
-        dto.setExpiryYear(method.getExpiryYear());
         return dto;
     }
 }

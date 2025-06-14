@@ -164,12 +164,6 @@ public class ParkingLot {
     @JoinColumn(name = "parking_lot_id")
     private List<PriceInterval> priceIntervals = new ArrayList<>();
 
-    @Column(name = "bank_account_name")
-    private String bankAccountName;
-
-    @Column(name = "bank_account_number")
-    private String bankAccountNumber;
-
     @Column(name = "allow_extensions_for_regular")
     private boolean allowExtensionsForRegular;
 
@@ -228,9 +222,6 @@ public class ParkingLot {
 
     @Column(name = "spots_available")
     private Integer spotsAvailable;
-
-    @Column(name = "stripe_connected_account_id", nullable = true, length = 255)
-    private String stripeConnectedAccountId;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;

@@ -38,9 +38,9 @@ public class UserUpdateDTO {
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    @Valid
-    private List<UserVehiclePlateDTO> vehiclePlates;
+    private String bankAccountName;
+    private String bankAccountNumber;
 
     @Valid
-    private List<UserPaymentMethodDTO> paymentMethods;
+    private List<UserVehiclePlateDTO> vehiclePlates;
 }

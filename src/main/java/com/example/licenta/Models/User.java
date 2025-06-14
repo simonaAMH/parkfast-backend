@@ -92,6 +92,15 @@ public class User {
     @Column(name = "stripe_customer_id")
     private String stripeCustomerId;
 
+    @Column(name = "bank_account_name")
+    private String bankAccountName;
+
+    @Column(name = "bank_account_number")
+    private String bankAccountNumber;
+
+    @Column(name = "stripe_connected_account_id", nullable = true, length = 255)
+    private String stripeConnectedAccountId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = OffsetDateTime.now();

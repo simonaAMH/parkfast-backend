@@ -32,7 +32,6 @@ public class UserService {
     private final ParkingLotRepository parkingLotRepository;
     private final WithdrawalRepository withdrawalRepository;
     private final UserVehiclePlateRepository vehiclePlateRepository;
-    private final UserPaymentMethodRepository paymentMethodRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final ImageService imageService;
@@ -41,7 +40,6 @@ public class UserService {
     @Autowired
     public UserService(UserRepository userRepository,
                        UserVehiclePlateRepository vehiclePlateRepository,
-                       UserPaymentMethodRepository paymentMethodRepository,
                        PasswordEncoder passwordEncoder,
                        EmailService emailService,
                        ImageService imageService,
@@ -50,7 +48,6 @@ public class UserService {
                        StripeService stripeService) {
         this.userRepository = userRepository;
         this.vehiclePlateRepository = vehiclePlateRepository;
-        this.paymentMethodRepository = paymentMethodRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.imageService = imageService;
@@ -299,43 +296,6 @@ public class UserService {
         return vehiclePlateRepository.findByUserId(userId);
     }
 
-    @Transactional
-    public UserPaymentMethod addPaymentMethod(String userId, UserPaymentMethodDTO methodDto) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
-
-        int currentYear = OffsetDateTime.now().getYear();
-        if (methodDto.getExpiryYear() < currentYear ||
-                (methodDto.getExpiryYear() == currentYear && methodDto.getExpiryMonth() < OffsetDateTime.now().getMonthValue())) {
-            throw new InvalidDataException("Payment card has expired.");
-        }
-
-        UserPaymentMethod method = new UserPaymentMethod();
-        method.setUser(user);
-        method.setCardNumber(methodDto.getCardNumber());
-        method.setExpiryMonth(methodDto.getExpiryMonth());
-        method.setExpiryYear(methodDto.getExpiryYear());
-
-        return paymentMethodRepository.save(method);
-    }
-
-    @Transactional
-    public void deletePaymentMethod(String userId, String methodId) {
-        UserPaymentMethod method = paymentMethodRepository.findByUserIdAndId(userId, methodId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Payment method not found with ID: " + methodId + " for user: " + userId));
-
-        paymentMethodRepository.delete(method);
-    }
-
-    @Transactional(readOnly = true)
-    public List<UserPaymentMethod> getPaymentMethods(String userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("User not found with ID: " + userId);
-        }
-        return paymentMethodRepository.findByUserId(userId);
-    }
-
 
     @Transactional
     public WithdrawalResponseDTO requestWithdrawal(String userId, WithdrawalRequestDTO withdrawalRequest) {
@@ -349,9 +309,9 @@ public class UserService {
             throw new InvalidDataException("You are not the owner of this parking lot.");
         }
 
-        if (parkingLot.getBankAccountName() == null || parkingLot.getBankAccountName().trim().isEmpty() ||
-                parkingLot.getBankAccountNumber() == null || parkingLot.getBankAccountNumber().trim().isEmpty()) {
-            throw new InvalidDataException("Bank account details are not configured for this parking lot. Please update your parking lot settings.");
+        if (user.getBankAccountName() == null || user.getBankAccountName().trim().isEmpty() ||
+                user.getBankAccountNumber() == null || user.getBankAccountNumber().trim().isEmpty()) {
+            throw new InvalidDataException("Bank account details are not configured for your account. Please update your profile settings.");
         }
 
         Double pendingEarnings = user.getPendingEarnings();
@@ -387,8 +347,9 @@ public class UserService {
                         .user(user)
                         .parkingLot(parkingLot)
                         .amount(amountToWithdraw)
-                        .bankAccountName(parkingLot.getBankAccountName())
-                        .bankAccountNumber(parkingLot.getBankAccountNumber())
+                        // CHANGED: Use user's bank account details instead of parking lot's
+                        .bankAccountName(user.getBankAccountName())
+                        .bankAccountNumber(user.getBankAccountNumber())
                         .status(Withdrawal.WithdrawalStatus.PENDING)
                         .requestedAt(OffsetDateTime.now())
                         .build());
@@ -396,15 +357,17 @@ public class UserService {
         withdrawal.setStatus(Withdrawal.WithdrawalStatus.PROCESSING);
 
         try {
-            String connectedAccountId = parkingLot.getStripeConnectedAccountId();
+            // CHANGED: Get connected account ID from user instead of parking lot
+            String connectedAccountId = user.getStripeConnectedAccountId();
             Account stripeAccount;
 
             if (connectedAccountId == null || connectedAccountId.isEmpty()) {
-                System.out.println("UserService: No Stripe Connected Account found for parking lot: " + parkingLot.getId() + ". Creating one.");
+                System.out.println("UserService: No Stripe Connected Account found for user: " + user.getId() + ". Creating one.");
                 stripeAccount = stripeService.createCustomConnectedAccount(user.getEmail(), "RO");
                 connectedAccountId = stripeAccount.getId();
-                parkingLot.setStripeConnectedAccountId(connectedAccountId);
-                System.out.println("UserService: Created Stripe Connected Account ID: " + connectedAccountId + " for parking lot: " + parkingLot.getId() + ". ParkingLot will be saved by transaction.");
+                // CHANGED: Set connected account ID on user instead of parking lot
+                user.setStripeConnectedAccountId(connectedAccountId);
+                System.out.println("UserService: Created Stripe Connected Account ID: " + connectedAccountId + " for user: " + user.getId() + ". User will be saved by transaction.");
 
                 AccountUpdateParams.Individual.Dob dob = AccountUpdateParams.Individual.Dob.builder()
                         .setDay(1L)
@@ -443,11 +406,12 @@ public class UserService {
                 );
                 System.out.println("UserService: Updated ToS acceptance for Connected Account: " + connectedAccountId);
 
-                System.out.println("UserService: Adding IBAN " + parkingLot.getBankAccountNumber() + " for " + parkingLot.getBankAccountName() + " to Connected Account " + connectedAccountId);
+                // CHANGED: Use user's bank account details instead of parking lot's
+                System.out.println("UserService: Adding IBAN " + user.getBankAccountNumber() + " for " + user.getBankAccountName() + " to Connected Account " + connectedAccountId);
                 BankAccount externalBankAccount = stripeService.addExternalBankAccountToConnectedAccount(
                         connectedAccountId,
-                        parkingLot.getBankAccountName(),
-                        parkingLot.getBankAccountNumber(),
+                        user.getBankAccountName(),
+                        user.getBankAccountNumber(),
                         true
                 );
                 System.out.println("UserService: Added bank account " + externalBankAccount.getId() + " to Connected Account: " + connectedAccountId);
@@ -455,7 +419,7 @@ public class UserService {
                 stripeAccount = stripeService.requestCapabilitiesForConnectedAccount(connectedAccountId, List.of("transfers"));
                 System.out.println("UserService: Ensured 'transfers' capability for Connected Account: " + connectedAccountId);
             } else {
-                System.out.println("UserService: Found existing Stripe Connected Account ID: " + connectedAccountId + " for parking lot: " + parkingLot.getId());
+                System.out.println("UserService: Found existing Stripe Connected Account ID: " + connectedAccountId + " for user: " + user.getId());
                 stripeAccount = Account.retrieve(connectedAccountId);
             }
 
@@ -505,12 +469,12 @@ public class UserService {
                     user.getEmail(),
                     withdrawal.getId(),
                     amountToWithdraw,
-                    parkingLot.getBankAccountNumber(),
+                    user.getBankAccountNumber(),
                     parkingLot.getName()
             );
 
         } catch (StripeException e) {
-            String stripeErrorMessage = "Stripe Error: An unexpected error occurred."; // Default message
+            String stripeErrorMessage = "Stripe Error: An unexpected error occurred.";
             if (e.getStripeError() != null && e.getStripeError().getMessage() != null) {
                 stripeErrorMessage = e.getStripeError().getMessage();
             } else if (e.getMessage() != null) {
@@ -519,26 +483,22 @@ public class UserService {
             System.err.println("UserService StripeException during Connect withdrawal for ID " + withdrawal.getId() + ": " + stripeErrorMessage + (e.getRequestId() != null ? " | Request ID: " + e.getRequestId() : ""));
 
             withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
-            // Store the detailed Stripe error message in the failure reason
             withdrawal.setFailureReason("Stripe Error: " + stripeErrorMessage);
 
-            // Throw a PaymentProcessingException with the specific Stripe error message
-            // This will be caught by the GlobalExceptionHandler
             throw new PaymentProcessingException(stripeErrorMessage);
         } catch (PaymentProcessingException ppe) {
             System.err.println("UserService PaymentProcessingException during Connect withdrawal for ID " + withdrawal.getId() + ": " + ppe.getMessage());
             withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
             withdrawal.setFailureReason(ppe.getMessage());
-            throw ppe; // Re-throw to be handled by GlobalExceptionHandler
+            throw ppe;
         }
         catch (Exception e) {
             System.err.println("UserService General Exception during Connect withdrawal for ID " + withdrawal.getId() + ": " + e.getMessage());
             withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
             withdrawal.setFailureReason("General Error: " + e.getMessage());
             if (e instanceof RuntimeException) {
-                throw (RuntimeException) e; // Re-throw specific runtime exceptions
+                throw (RuntimeException) e;
             }
-            // Wrap other checked exceptions in PaymentProcessingException
             throw new PaymentProcessingException("Withdrawal processing failed due to an unexpected error: " + e.getMessage());
         } finally {
             System.out.println("UserService: Saving final state of Withdrawal ID: " + withdrawal.getId() + " with Status: " + withdrawal.getStatus());
@@ -546,7 +506,6 @@ public class UserService {
                 withdrawalRepository.saveAndFlush(withdrawal);
             } catch (Exception exInFinally) {
                 System.err.println("UserService: Error saving withdrawal state in finally block for ID " + withdrawal.getId() + ": " + exInFinally.getMessage());
-                // Do not re-throw from finally if an exception is already propagating
             }
         }
 
@@ -580,14 +539,15 @@ public class UserService {
 
         List<ParkingLotWithdrawalInfoDTO> availableParkingLots = userParkingLots.stream()
                 .map(lot -> {
-                    boolean canWithdraw = lot.getBankAccountName() != null && !lot.getBankAccountName().isBlank() &&
-                            lot.getBankAccountNumber() != null && !lot.getBankAccountNumber().isBlank() &&
+                    boolean canWithdraw = user.getBankAccountName() != null && !user.getBankAccountName().isBlank() &&
+                            user.getBankAccountNumber() != null && !user.getBankAccountNumber().isBlank() &&
                             user.getPendingEarnings() != null &&
                             user.getPendingEarnings() > 0;
 
                     String blockReason = null;
-                    if (lot.getBankAccountName() == null || lot.getBankAccountName().isBlank() || lot.getBankAccountNumber() == null || lot.getBankAccountNumber().isBlank()) {
-                        blockReason = "Bank account details not configured for the parking lot.";
+                    if (user.getBankAccountName() == null || user.getBankAccountName().isBlank() ||
+                            user.getBankAccountNumber() == null || user.getBankAccountNumber().isBlank()) {
+                        blockReason = "Bank account details not configured in your profile. Please update your account settings.";
                     } else if (user.getPendingEarnings() == null || user.getPendingEarnings() <= 0) {
                         blockReason = "No pending earnings available for withdrawal.";
                     } else if (withdrawalRepository.existsByUserIdAndParkingLotIdAndStatusIn(userId, lot.getId(), List.of(Withdrawal.WithdrawalStatus.PENDING, Withdrawal.WithdrawalStatus.PROCESSING))) {
@@ -595,13 +555,13 @@ public class UserService {
                         canWithdraw = false;
                     }
 
-
                     return ParkingLotWithdrawalInfoDTO.builder()
                             .id(lot.getId())
                             .name(lot.getName())
                             .address(lot.getAddress())
-                            .bankAccountName(lot.getBankAccountName())
-                            .bankAccountNumber(lot.getBankAccountNumber())
+                            // CHANGED: Use user's bank account details instead of parking lot's
+                            .bankAccountName(user.getBankAccountName())
+                            .bankAccountNumber(user.getBankAccountNumber())
                             .pendingEarnings(user.getPendingEarnings())
                             .canWithdraw(canWithdraw)
                             .withdrawalBlockReason(blockReason)
