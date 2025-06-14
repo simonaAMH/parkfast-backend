@@ -1,9 +1,6 @@
 package com.example.licenta.Controllers;
 
-import com.example.licenta.DTOs.ApiResponse;
-import com.example.licenta.DTOs.ClosestParkingLotInfoDTO;
-import com.example.licenta.DTOs.ParkingLotDTO;
-import com.example.licenta.DTOs.ReviewDTO;
+import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Exceptions.InvalidDataException;
 import com.example.licenta.Mappers.ParkingLotMapper;
@@ -350,6 +347,22 @@ public class ParkingLotController {
                 HttpStatus.OK.value(),
                 "Parking lot reviews retrieved successfully",
                 responseData
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{parkingLotId}/analytics")
+    public ResponseEntity<ApiResponse<ParkingLotAnalyticsDTO>> getParkingLotAnalytics(
+            @PathVariable String parkingLotId,
+            @RequestParam(name = "period", defaultValue = "7d") String period) {
+
+        ParkingLotAnalyticsDTO analyticsDTO = parkingLotService.getParkingLotAnalytics(parkingLotId, period);
+
+        ApiResponse<ParkingLotAnalyticsDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Parking lot analytics retrieved successfully",
+                analyticsDTO
         );
         return ResponseEntity.ok(response);
     }

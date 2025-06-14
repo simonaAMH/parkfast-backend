@@ -2,7 +2,9 @@ package com.example.licenta.Repositories;
 
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.Reservation;
+import com.example.licenta.Models.Review;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -109,4 +111,65 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
             "AND r.endTime < :now " +
             "AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID")
     Page<Reservation> findEndedReservationsForParkingLot(@Param("parkingLotId") String parkingLotId, @Param("now") OffsetDateTime now, Pageable pageable);
+
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot IN :parkingLots AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime >= :overallStartTime AND r.endTime <= :overallEndTime")
+    List<Reservation> findPaidReservationsInDateRange(
+            @Param("parkingLots") List<ParkingLot> parkingLots,
+            @Param("overallStartTime") OffsetDateTime overallStartTime,
+            @Param("overallEndTime") OffsetDateTime overallEndTime
+    );
+
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot IN :parkingLots AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.ACTIVE AND r.reservationType = com.example.licenta.Enum.Reservation.ReservationType.PAY_FOR_USAGE AND r.endTime IS NULL AND r.startTime <= :currentTime")
+    List<Reservation> findActivePayForUsageReservationsForLots(
+            @Param("parkingLots") List<ParkingLot> parkingLots,
+            @Param("currentTime") OffsetDateTime currentTime
+    );
+
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime >= :startTime AND r.endTime <= :endTime")
+    List<Reservation> findPaidReservationsForLotInDateRange(
+            @Param("parkingLotId") String parkingLotId,
+            @Param("startTime") OffsetDateTime startTime,
+            @Param("endTime") OffsetDateTime endTime
+    );
+
+    @Query("SELECT r FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.ACTIVE AND r.reservationType = com.example.licenta.Enum.Reservation.ReservationType.PAY_FOR_USAGE AND r.endTime IS NULL AND r.startTime <= :currentTime")
+    List<Reservation> findActivePayForUsageReservationsForLot(
+            @Param("parkingLotId") String parkingLotId,
+            @Param("currentTime") OffsetDateTime currentTime
+    );
+
+    // For Customer Insights - Average Rating
+    @Query("SELECT AVG(rev.rating) FROM Review rev WHERE rev.reservation.parkingLot.id = :parkingLotId")
+    Double getAverageRatingForParkingLot(@Param("parkingLotId") String parkingLotId);
+
+    // For Customer Insights - Repeat Customer Rate (Example: count users with > 1 reservation at this lot)
+    // This is a simplified version. A more accurate one might need to look at distinct users over a longer period.
+    @Query("SELECT COUNT(DISTINCT r.user.id) FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.user IS NOT NULL AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime <= :endTime")
+    Long countDistinctUsersForLot(@Param("parkingLotId") String parkingLotId, @Param("endTime") OffsetDateTime endTime);
+
+    @Query("SELECT COUNT(r.user.id) FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.user IS NOT NULL AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime <= :endTime GROUP BY r.user.id HAVING COUNT(r.user.id) > 1")
+    List<Long> countUsersWithMultipleReservationsForLot(@Param("parkingLotId") String parkingLotId, @Param("endTime") OffsetDateTime endTime);
+
+
+    // For Customer Insights - Popular Reservation Types
+    @Query("SELECT r.reservationType, COUNT(r) FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.PAID AND r.endTime <= :endTime AND r.endTime >= :startTime GROUP BY r.reservationType")
+    List<Object[]> countReservationsByTypeForLot(
+            @Param("parkingLotId") String parkingLotId,
+            @Param("startTime") OffsetDateTime startTime,
+            @Param("endTime") OffsetDateTime endTime
+    );
+
+    // For Cancellation Rate
+    @Query("SELECT COUNT(r) FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.status = com.example.licenta.Enum.Reservation.ReservationStatus.CANCELLED AND r.createdAt >= :startTime AND r.createdAt <= :endTime")
+    Long countCancelledReservationsForLotInDateRange(
+            @Param("parkingLotId") String parkingLotId,
+            @Param("startTime") OffsetDateTime startTime,
+            @Param("endTime") OffsetDateTime endTime);
+
+    @Query("SELECT COUNT(r) FROM Reservation r WHERE r.parkingLot.id = :parkingLotId AND r.createdAt >= :startTime AND r.createdAt <= :endTime")
+    Long countTotalAttemptedReservationsForLotInDateRange( // Includes paid and cancelled
+                                                           @Param("parkingLotId") String parkingLotId,
+                                                           @Param("startTime") OffsetDateTime startTime,
+                                                           @Param("endTime") OffsetDateTime endTime);
+    
 }

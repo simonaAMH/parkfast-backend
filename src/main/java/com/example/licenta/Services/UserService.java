@@ -22,11 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.format.TextStyle;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +41,7 @@ public class UserService {
     private final EmailService emailService;
     private final ImageService imageService;
     private final StripeService stripeService;
+    private final ReservationRepository reservationRepository;
 
     @Autowired
     public UserService(UserRepository userRepository,
@@ -49,6 +51,7 @@ public class UserService {
                        ImageService imageService,
                        ParkingLotRepository parkingLotRepository,
                        WithdrawalRepository withdrawalRepository,
+                       ReservationRepository reservationRepository,
                        StripeService stripeService) {
         this.userRepository = userRepository;
         this.vehiclePlateRepository = vehiclePlateRepository;
@@ -58,7 +61,290 @@ public class UserService {
         this.parkingLotRepository = parkingLotRepository;
         this.withdrawalRepository = withdrawalRepository;
         this.stripeService = stripeService;
+        this.reservationRepository = reservationRepository;
     }
+
+    private static class PeriodDates {
+        OffsetDateTime currentStart, currentEnd, prevStart, prevEnd;
+        int numberOfUnits; // e.g., 7 for "7d", 24 for "1d"
+        ChronoUnit timeUnit; // DAYS for "7d", "14d", "30d"; HOURS for "1d"
+        Function<OffsetDateTime, String> labelFormatter;
+
+        PeriodDates(OffsetDateTime cs, OffsetDateTime ce, OffsetDateTime ps, OffsetDateTime pe, int nu, ChronoUnit tu, Function<OffsetDateTime, String> lf) {
+            currentStart = cs; currentEnd = ce; prevStart = ps; prevEnd = pe;
+            numberOfUnits = nu; timeUnit = tu; labelFormatter = lf;
+        }
+    }
+
+    private PeriodDates calculatePeriodDates(String periodStr, OffsetDateTime now) {
+        OffsetDateTime currentStart, currentEnd, prevStart, prevEnd;
+        int numberOfUnits;
+        ChronoUnit timeUnit;
+        Function<OffsetDateTime, String> labelFormatter;
+
+        currentEnd = now;
+
+        switch (periodStr.toLowerCase()) {
+            case "1d":
+                currentStart = now.minusDays(1).truncatedTo(ChronoUnit.HOURS); // Start of the hour, 24 hours ago
+                prevEnd = currentStart.minusNanos(1);
+                prevStart = currentStart.minusDays(1);
+                numberOfUnits = 24;
+                timeUnit = ChronoUnit.HOURS;
+                labelFormatter = dt -> String.format("%02d", dt.getHour()); // Hour (00-23)
+                break;
+            case "14d":
+                currentStart = now.minusDays(14).with(LocalTime.MIN);
+                prevEnd = currentStart.minusNanos(1);
+                prevStart = currentStart.minusDays(14);
+                numberOfUnits = 14;
+                timeUnit = ChronoUnit.DAYS;
+                labelFormatter = dt -> String.valueOf(dt.getDayOfMonth()); // Day of month
+                break;
+            case "30d":
+                currentStart = now.minusDays(30).with(LocalTime.MIN);
+                prevEnd = currentStart.minusNanos(1);
+                prevStart = currentStart.minusDays(30);
+                numberOfUnits = 30;
+                timeUnit = ChronoUnit.DAYS;
+                labelFormatter = dt -> String.valueOf(dt.getDayOfMonth()); // Day of month
+                break;
+            case "7d":
+            default: // Default to 7 days
+                currentStart = now.minusDays(7).with(LocalTime.MIN);
+                prevEnd = currentStart.minusNanos(1);
+                prevStart = currentStart.minusDays(7);
+                numberOfUnits = 7;
+                timeUnit = ChronoUnit.DAYS;
+                labelFormatter = dt -> dt.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.US); // Mon, Tue
+                break;
+        }
+        // Ensure currentStart is not after currentEnd if period is very short (e.g. "1d" and now is 00:00)
+        if (currentStart.isAfter(currentEnd) && "1d".equals(periodStr.toLowerCase())) {
+            currentStart = currentEnd.minusDays(1); // Ensure at least a full 24 hour window for labels
+        }
+
+
+        return new PeriodDates(currentStart, currentEnd, prevStart, prevEnd, numberOfUnits, timeUnit, labelFormatter);
+    }
+
+    private List<TimePerUnit> getTimeUnits(PeriodDates dates) {
+        List<TimePerUnit> units = new ArrayList<>();
+        OffsetDateTime unitStart = dates.currentStart;
+        for (int i = 0; i < dates.numberOfUnits; i++) {
+            OffsetDateTime unitEnd;
+            if (dates.timeUnit == ChronoUnit.HOURS) {
+                unitEnd = unitStart.plusHours(1).minusNanos(1);
+            } else { // DAYS
+                unitEnd = unitStart.with(LocalTime.MAX);
+            }
+            // Ensure unitEnd does not exceed dates.currentEnd for the last unit
+            if (unitEnd.isAfter(dates.currentEnd)) {
+                unitEnd = dates.currentEnd;
+            }
+
+            units.add(new TimePerUnit(unitStart, unitEnd, dates.labelFormatter.apply(unitStart)));
+
+            if (unitStart.isAfter(dates.currentEnd) || unitStart.equals(dates.currentEnd) || unitEnd.equals(dates.currentEnd)) break; // Stop if we've covered the range
+
+            unitStart = (dates.timeUnit == ChronoUnit.HOURS) ? unitStart.plusHours(1) : unitStart.plusDays(1).with(LocalTime.MIN);
+        }
+        return units;
+    }
+
+
+    private static class TimePerUnit {
+        OffsetDateTime start, end;
+        String label;
+        TimePerUnit(OffsetDateTime s, OffsetDateTime e, String l) { start = s; end = e; label = l; }
+    }
+
+
+    @Transactional(readOnly = true)
+    public PortfolioAnalyticsDTO getPortfolioAnalytics(String userId, String periodString) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        List<ParkingLot> ownerLots = parkingLotRepository.findByOwner(user);
+        if (ownerLots.isEmpty()) {
+            // Return empty/default DTO if no lots
+            return PortfolioAnalyticsDTO.builder()
+                    .portfolioMetrics(PortfolioMetricsDTO.builder()
+                            .totalRevenue(0.0).totalReservations(0L).averageOccupancy(0.0)
+                            .topPerformingLot("N/A")
+                            .growth(GrowthDTO.builder().revenue(0.0).reservations(0.0).occupancy(0.0).build())
+                            .build())
+                    .revenueChartData(Collections.emptyList())
+                    .reservationChartData(Collections.emptyList())
+                    .occupancyChartData(Collections.emptyList())
+                    .lotPerformanceData(Collections.emptyList())
+                    .build();
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        PeriodDates dates = calculatePeriodDates(periodString, now);
+        List<TimePerUnit> timeUnits = getTimeUnits(dates);
+
+        // Fetch all potentially relevant reservations
+        List<Reservation> paidReservations = reservationRepository.findPaidReservationsInDateRange(
+                ownerLots, dates.prevStart, dates.currentEnd);
+        List<Reservation> activePayForUsage = reservationRepository.findActivePayForUsageReservationsForLots(
+                ownerLots, dates.currentEnd); // Active up to current moment
+
+        // --- Current Period Calculations ---
+        Map<String, Double> lotRevenueCurrent = new HashMap<>();
+        double totalRevenueCurrent = 0.0;
+        long totalReservationsCurrent = 0L;
+
+        List<ChartDataPointDTO<String, Double>> revenueChart = new ArrayList<>();
+        List<ChartDataPointDTO<String, Long>> reservationChart = new ArrayList<>();
+        List<ChartDataPointDTO<String, Double>> occupancyChart = new ArrayList<>();
+        List<Double> dailyOccupancyRatesCurrent = new ArrayList<>();
+
+        long totalPortfolioSpots = ownerLots.stream().mapToLong(ParkingLot::getTotalSpots).sum();
+
+        for (TimePerUnit unit : timeUnits) {
+            double unitRevenue = 0.0;
+            long unitReservations = 0L;
+            long unitActiveReservationInstances = 0; // For occupancy
+
+            for (Reservation r : paidReservations) {
+                if (r.getEndTime().isAfter(unit.start.minusNanos(1)) && r.getEndTime().isBefore(unit.end.plusNanos(1))) {
+                    unitRevenue += r.getTotalAmount();
+                    unitReservations++;
+                    if (r.getEndTime().isAfter(dates.currentStart.minusNanos(1))) { // Count towards current period totals
+                        lotRevenueCurrent.merge(r.getParkingLot().getName(), r.getTotalAmount(), Double::sum);
+                    }
+                }
+                // For occupancy: reservation overlaps with the unit's time window
+                if (r.getStartTime().isBefore(unit.end) && r.getEndTime().isAfter(unit.start)) {
+                    unitActiveReservationInstances++;
+                }
+            }
+            for (Reservation r : activePayForUsage) { // PFU contributes to occupancy if active during unit
+                if (r.getStartTime().isBefore(unit.end)) { // No end time, started before unit ends
+                    unitActiveReservationInstances++;
+                }
+            }
+
+            revenueChart.add(ChartDataPointDTO.<String, Double>builder().label(unit.label).value(unitRevenue).build());
+            reservationChart.add(ChartDataPointDTO.<String, Long>builder().label(unit.label).value(unitReservations).build());
+
+            double unitOccupancy = 0.0;
+            if (totalPortfolioSpots > 0) {
+                // Simplified: (number of overlapping reservations / total spots) * 100
+                // This is a rough proxy and doesn't account for reservation duration within the unit or actual spot usage over time.
+                unitOccupancy = ((double) unitActiveReservationInstances / totalPortfolioSpots) * 100.0;
+                unitOccupancy = Math.min(unitOccupancy, 100.0); // Cap at 100%
+            }
+            occupancyChart.add(ChartDataPointDTO.<String, Double>builder().label(unit.label).value(unitOccupancy).build());
+            if(unit.start.isAfter(dates.currentStart.minusNanos(1)) && unit.end.isBefore(dates.currentEnd.plusNanos(1))) {
+                dailyOccupancyRatesCurrent.add(unitOccupancy);
+            }
+        }
+
+        // Sum current totals from PAID reservations ending in current period
+        for (Reservation r : paidReservations) {
+            if (r.getEndTime().isAfter(dates.currentStart.minusNanos(1)) && r.getEndTime().isBefore(dates.currentEnd.plusNanos(1))) {
+                totalRevenueCurrent += r.getTotalAmount();
+                totalReservationsCurrent++;
+            }
+        }
+
+
+        double averageOccupancyCurrent = dailyOccupancyRatesCurrent.stream().mapToDouble(d -> d).average().orElse(0.0);
+
+        // --- Previous Period Calculations ---
+        double totalRevenuePrevious = 0.0;
+        long totalReservationsPrevious = 0L;
+        List<Double> dailyOccupancyRatesPrevious = new ArrayList<>();
+
+        // Re-calculate time units for previous period for occupancy comparison
+        PeriodDates prevPeriodDatesForOccupancy = new PeriodDates(dates.prevStart, dates.prevEnd, dates.prevStart.minusDays(ChronoUnit.DAYS.between(dates.prevStart, dates.prevEnd)), dates.prevStart.minusNanos(1), dates.numberOfUnits, dates.timeUnit, dates.labelFormatter);
+        List<TimePerUnit> prevTimeUnits = getTimeUnits(prevPeriodDatesForOccupancy);
+
+
+        for (TimePerUnit unit : prevTimeUnits) {
+            long unitActiveReservationInstancesPrev = 0;
+            for (Reservation r : paidReservations) { // Using all fetched paid reservations
+                if (r.getEndTime().isAfter(unit.start.minusNanos(1)) && r.getEndTime().isBefore(unit.end.plusNanos(1))) {
+                    //These are for totals, not chart points for prev period
+                }
+                if (r.getStartTime().isBefore(unit.end) && r.getEndTime().isAfter(unit.start)) {
+                    unitActiveReservationInstancesPrev++;
+                }
+            }
+            for (Reservation r : activePayForUsage) { // PFU, if it was active back then (less likely for old data)
+                if (r.getStartTime().isBefore(unit.end)) {
+                    unitActiveReservationInstancesPrev++;
+                }
+            }
+            double unitOccupancyPrev = 0.0;
+            if (totalPortfolioSpots > 0) {
+                unitOccupancyPrev = ((double) unitActiveReservationInstancesPrev / totalPortfolioSpots) * 100.0;
+                unitOccupancyPrev = Math.min(unitOccupancyPrev, 100.0);
+            }
+            dailyOccupancyRatesPrevious.add(unitOccupancyPrev);
+        }
+
+        for (Reservation r : paidReservations) {
+            if (r.getEndTime().isAfter(dates.prevStart.minusNanos(1)) && r.getEndTime().isBefore(dates.prevEnd.plusNanos(1))) {
+                totalRevenuePrevious += r.getTotalAmount();
+                totalReservationsPrevious++;
+            }
+        }
+
+        double averageOccupancyPrevious = dailyOccupancyRatesPrevious.stream().mapToDouble(d -> d).average().orElse(0.0);
+
+        // --- Growth Calculations ---
+        GrowthDTO growth = GrowthDTO.builder()
+                .revenue(calculateGrowth(totalRevenueCurrent, totalRevenuePrevious))
+                .reservations(calculateGrowth(totalReservationsCurrent, totalReservationsPrevious))
+                .occupancy(calculateGrowth(averageOccupancyCurrent, averageOccupancyPrevious))
+                .build();
+
+        String topPerformingLot = lotRevenueCurrent.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("N/A");
+
+        PortfolioMetricsDTO metrics = PortfolioMetricsDTO.builder()
+                .totalRevenue(totalRevenueCurrent)
+                .totalReservations(totalReservationsCurrent)
+                .averageOccupancy(averageOccupancyCurrent)
+                .topPerformingLot(topPerformingLot)
+                .growth(growth)
+                .build();
+
+        List<LotPerformanceDataDTO> lotPerformance = lotRevenueCurrent.entrySet().stream()
+                .map(entry -> LotPerformanceDataDTO.builder().label(entry.getKey()).value(entry.getValue()).build())
+                .sorted((l1, l2) -> l2.getValue().compareTo(l1.getValue())) // Sort descending by revenue
+                .collect(Collectors.toList());
+
+        return PortfolioAnalyticsDTO.builder()
+                .portfolioMetrics(metrics)
+                .revenueChartData(revenueChart)
+                .reservationChartData(reservationChart)
+                .occupancyChartData(occupancyChart)
+                .lotPerformanceData(lotPerformance)
+                .build();
+    }
+
+    private Double calculateGrowth(double current, double previous) {
+        if (previous == 0) {
+            return (current == 0) ? 0.0 : 100.0; // Or some other indicator for infinite growth if current > 0
+        }
+        return ((current - previous) / previous) * 100.0;
+    }
+    private Double calculateGrowth(long currentL, long previousL) {
+        double current = (double) currentL;
+        double previous = (double) previousL;
+        if (previous == 0) {
+            return (current == 0) ? 0.0 : 100.0;
+        }
+        return ((current - previous) / previous) * 100.0;
+    }
+
 
     @Transactional
     public User registerUser(UserRegistrationDTO userDTO) {

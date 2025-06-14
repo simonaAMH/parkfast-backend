@@ -355,10 +355,6 @@ public class UserController {
         User currentUser = userService.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
 
-        if (!currentUser.getId().equals(userId)) {
-            throw new InvalidDataException("You can only view your own withdrawals");
-        }
-
         Page<WithdrawalResponseDTO> withdrawals = userService.getUserWithdrawals(userId, pageable);
 
         ApiResponse<Page<WithdrawalResponseDTO>> response = new ApiResponse<>(
@@ -378,16 +374,32 @@ public class UserController {
         User currentUser = userService.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
 
-        if (!currentUser.getId().equals(userId)) {
-            throw new InvalidDataException("You can only view your own withdrawal summary");
-        }
-
         WithdrawalSummaryDTO summary = userService.getWithdrawalSummary(userId);
 
         ApiResponse<WithdrawalSummaryDTO> response = new ApiResponse<>(
                 true,
                 HttpStatus.OK.value(),
                 "Withdrawal summary retrieved successfully",
+                summary
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{userId}/portfolio-analytics")
+    public ResponseEntity<ApiResponse<PortfolioAnalyticsDTO>> getPortfolioAnalytics(
+            @PathVariable String userId,
+            @RequestParam(name = "period", defaultValue = "7d") String period) {
+
+        User currentUser = userService.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
+
+        PortfolioAnalyticsDTO summary = userService.getPortfolioAnalytics(userId, period);
+
+        ApiResponse<PortfolioAnalyticsDTO> response = new ApiResponse<>(
+                true,
+                HttpStatus.OK.value(),
+                "Portfolio Analytics retrieved successfully",
                 summary
         );
 
