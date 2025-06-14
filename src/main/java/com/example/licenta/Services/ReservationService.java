@@ -680,12 +680,9 @@ public class ReservationService {
 
                     if (user != null && reservation.getStripeCustomerId() != null) {
                         try {
-                            // The payment method is already attached by the SetupIntent.
-                            // We just need to set it as default for the customer for future invoices/payments.
                             stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodId);
                         } catch (StripeException e) {
                             System.err.println("Failed to set default payment method for customer " + reservation.getStripeCustomerId() + " after SetupIntent: " + e.getMessage());
-                            // Continue, as card is saved, just not default.
                         }
                     }
                     System.out.println("Pay For Usage card setup successful via SetupIntent for reservation " + reservationId + ". Status set to ACTIVE.");
@@ -699,10 +696,10 @@ public class ReservationService {
                         emailService.sendPayForUsageActiveEmail(recipientEmailPfu, reservation.getId(), parkingLot.getName(), reservation.getStartTime(), guestTokenPfu);
                     }
                 } else {
-                    System.err.println("Stripe SetupIntent " + ((SetupIntent) setupIntent).getId() + " for reservation " + reservationId +
+                    System.err.println("Stripe SetupIntent " + setupIntent.getId() + " for reservation " + reservationId +
                             " is not 'succeeded'. Actual status: " + setupIntent.getStatus() + ". Setting reservation status to PAYMENT_FAILED.");
                     reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation); // Save before throwing
+                    reservationRepository.save(reservation);
                     throw new PaymentProcessingException("Stripe card setup verification failed. Status: " + setupIntent.getStatus());
                 }
             }
@@ -711,34 +708,65 @@ public class ReservationService {
                 PaymentIntent paymentIntent = stripeService.retrievePaymentIntent(reservation.getStripePaymentIntentId());
 
                 if ("succeeded".equals(paymentIntent.getStatus())) {
-                    // This is a regular payment or end of PFU billing. Status becomes PAID.
                     reservation.setStatus(ReservationStatus.PAID);
 
                     Double pointsUsed = reservation.getPointsUsed() != null ? reservation.getPointsUsed() : 0.0;
                     Double finalAmountPaid = reservation.getFinalAmount() != null ? reservation.getFinalAmount() : 0.0;
 
+                    // Update user loyalty points
                     if (user != null && pointsUsed > 0) {
                         Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
                         user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsUsed));
                     }
                     if (user != null && finalAmountPaid > 0) {
-                        double pointsToAddUnrounded = finalAmountPaid * 0.05; // Award points based on actual amount paid
+                        double pointsToAddUnrounded = finalAmountPaid * 0.05;
                         BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded).setScale(2, RoundingMode.HALF_UP);
                         Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
                         Double currentLoyaltyPointsAfterDeduction = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
                         user.setLoyaltyPoints(currentLoyaltyPointsAfterDeduction + pointsToAdd);
                     }
 
-                    // If this PaymentIntent also set up a card for future use (e.g. for a DIRECT reservation)
+                    // ADD THIS: Update owner earnings for successful payments
+                    if (finalAmountPaid > 0 && parkingLot != null && parkingLot.getOwner() != null) {
+                        User owner = parkingLot.getOwner();
+
+                        Double netAmountForOwner = 0.0; // Rough calculation
+
+
+                        if (paymentIntent.getLatestCharge() != null) {
+                            Charge charge = paymentIntent.getLatestChargeObject();
+                            if (charge.getBalanceTransaction() != null) {
+                                BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(charge.getBalanceTransaction());
+                                netAmountForOwner = balanceTransaction.getNet() / 100.0; // Convert from cents
+                            }
+                        }
+
+                        if (netAmountForOwner < 0) netAmountForOwner = 0.0;
+
+                        if (netAmountForOwner > 0) {
+                            Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
+                            Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
+
+                            owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings)
+                                    .add(BigDecimal.valueOf(netAmountForOwner))
+                                    .setScale(2, RoundingMode.HALF_UP)
+                                    .doubleValue());
+                            owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings)
+                                    .add(BigDecimal.valueOf(netAmountForOwner))
+                                    .setScale(2, RoundingMode.HALF_UP)
+                                    .doubleValue());
+
+                            userRepository.save(owner);
+                            System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
+                        }
+                    }
+
+                    // Handle payment method saving for future use
                     String paymentMethodIdFromPI = paymentIntent.getPaymentMethod();
                     if (paymentMethodIdFromPI != null && paymentIntent.getSetupFutureUsage() != null && !paymentIntent.getSetupFutureUsage().isEmpty()) {
-                        // Save this new payment method ID on the reservation if it's a primary PFU or if user wants to update default
-                        // For now, let's assume PFU activation handles its primary PM. This would be for other types.
-                        // reservation.setStripePaymentMethodId(paymentMethodIdFromPI); // Potentially overwrite if this is the new primary
                         if (user != null && reservation.getStripeCustomerId() != null) {
                             try {
                                 stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodIdFromPI);
-                                // If it's a PFU reservation that somehow got here AND it didn't have a PM_ID yet
                                 if(reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getStripePaymentMethodId() == null){
                                     reservation.setStripePaymentMethodId(paymentMethodIdFromPI);
                                 }
@@ -748,6 +776,7 @@ public class ReservationService {
                         }
                     }
 
+                    // Send confirmation email
                     String recipientEmailPaid = (user != null && user.getEmail() != null) ? user.getEmail() : reservation.getGuestEmail();
                     String guestTokenPaid = null;
                     if (user == null && parkingLot != null) {
@@ -761,11 +790,10 @@ public class ReservationService {
                     System.err.println("Stripe PaymentIntent " + paymentIntent.getId() + " for reservation " + reservationId +
                             " is not 'succeeded'. Actual status: " + paymentIntent.getStatus() + ". Setting reservation status to PAYMENT_FAILED.");
                     reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation); // Save before throwing
-                    throw new PaymentProcessingException("Stripe payment verification failed. Status: " + ((PaymentIntent) paymentIntent).getStatus());
+                    reservationRepository.save(reservation);
+                    throw new PaymentProcessingException("Stripe payment verification failed. Status: " + paymentIntent.getStatus());
                 }
             } else {
-                // Neither SetupIntentId nor PaymentIntentId is present, which is an invalid state for confirmation.
                 throw new InvalidDataException("Reservation " + reservationId + " does not have a Stripe Intent ID (Payment or Setup) for verification.");
             }
 
@@ -777,7 +805,6 @@ public class ReservationService {
 
         } catch (StripeException e) {
             System.err.println("Stripe API error during payment confirmation for reservation " + reservationId + ": " + e.getMessage() + ". Setting reservation status to PAYMENT_FAILED.");
-            // Ensure status is set to FAILED only if it wasn't already confirmed as PAID/ACTIVE
             if (reservation.getStatus() != ReservationStatus.PAID && reservation.getStatus() != ReservationStatus.ACTIVE) {
                 reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
                 reservationRepository.save(reservation);
@@ -1108,7 +1135,7 @@ public class ReservationService {
                         parkingLot.getName(),
                         updatedReservation.getStartTime(),
                         updatedReservation.getEndTime(),
-                        finalAmountCustomerPays, // Email shows what customer paid
+                        finalAmountCustomerPays,
                         guestAccessTokenString
                 );
             }
