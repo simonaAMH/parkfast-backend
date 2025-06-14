@@ -16,17 +16,12 @@ import java.time.OffsetDateTime;
 @Builder
 public class Withdrawal {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", updatable = false, nullable = false, length = 36)
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parking_lot_id", nullable = false)
-    private ParkingLot parkingLot;
 
     @Column(name = "amount", nullable = false)
     private Double amount;
@@ -52,6 +47,10 @@ public class Withdrawal {
 
     @Column(name = "processed_at")
     private OffsetDateTime processedAt;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     @PrePersist
     protected void onCreate() {

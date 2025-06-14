@@ -10,11 +10,14 @@ import com.stripe.model.Account;
 import com.stripe.model.BankAccount;
 import com.stripe.model.Transfer;
 import com.stripe.param.AccountUpdateParams;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
@@ -339,7 +342,193 @@ public class UserService {
 
         String withdrawalId = UUID.randomUUID().toString();
 
-        return processWithdrawalPayment(userId, withdrawalId, null, pendingEarnings);
+        // Create withdrawal record
+        Withdrawal withdrawal = Withdrawal.builder()
+                .id(withdrawalId)
+                .user(user)
+                .amount(pendingEarnings)
+                .bankAccountName(user.getBankAccountName())
+                .bankAccountNumber(user.getBankAccountNumber())
+                .status(Withdrawal.WithdrawalStatus.PENDING)
+                .requestedAt(OffsetDateTime.now())
+                .build();
+
+        // Save the withdrawal
+        withdrawal = withdrawalRepository.save(withdrawal);
+
+        // Process the payment in the same transaction
+        return processWithdrawalPaymentInternal(withdrawal, user, pendingEarnings);
+    }
+
+    private WithdrawalResponseDTO processWithdrawalPaymentInternal(Withdrawal withdrawal, User user, Double amountToWithdraw) {
+        // Update status to PROCESSING
+        withdrawal.setStatus(Withdrawal.WithdrawalStatus.PROCESSING);
+        withdrawal = withdrawalRepository.save(withdrawal);
+
+        try {
+            String connectedAccountId = user.getStripeConnectedAccountId();
+            Account stripeAccount;
+
+            if (connectedAccountId == null || connectedAccountId.isEmpty()) {
+                System.out.println("UserService: No Stripe Connected Account found for user: " + user.getId() + ". Creating one.");
+                stripeAccount = stripeService.createCustomConnectedAccount(user.getEmail(), "RO");
+                connectedAccountId = stripeAccount.getId();
+                user.setStripeConnectedAccountId(connectedAccountId);
+                System.out.println("UserService: Created Stripe Connected Account ID: " + connectedAccountId + " for user: " + user.getId());
+
+                // Update account details
+                AccountUpdateParams.Individual.Dob dob = AccountUpdateParams.Individual.Dob.builder()
+                        .setDay(1L)
+                        .setMonth(1L)
+                        .setYear(1990L)
+                        .build();
+                AccountUpdateParams.Individual.Address address = AccountUpdateParams.Individual.Address.builder()
+                        .setLine1("Default Address Line 1")
+                        .setCity("Default City")
+                        .setPostalCode("000000")
+                        .setCountry("RO")
+                        .build();
+
+                AccountUpdateParams.BusinessProfile businessProfile =
+                        AccountUpdateParams.BusinessProfile.builder()
+                                .setUrl("https://parkfast.it")
+                                .build();
+
+                stripeAccount = stripeService.updateConnectedAccountIndividualDetails(
+                        connectedAccountId,
+                        Optional.ofNullable(user.getUsername()).orElse(user.getUsername()),
+                        "LastName",
+                        user.getEmail(),
+                        dob,
+                        address,
+                        Optional.ofNullable(user.getPhoneNumber()).orElse("+40700000000"),
+                        null,
+                        businessProfile
+                );
+                System.out.println("UserService: Updated individual details for Connected Account: " + connectedAccountId);
+
+                stripeAccount = stripeService.acceptTosForConnectedAccount(
+                        connectedAccountId,
+                        "127.0.0.1",
+                        Instant.now().getEpochSecond()
+                );
+                System.out.println("UserService: Updated ToS acceptance for Connected Account: " + connectedAccountId);
+
+                System.out.println("UserService: Adding IBAN " + user.getBankAccountNumber() + " for " + user.getBankAccountName() + " to Connected Account " + connectedAccountId);
+                BankAccount externalBankAccount = stripeService.addExternalBankAccountToConnectedAccount(
+                        connectedAccountId,
+                        user.getBankAccountName(),
+                        user.getBankAccountNumber(),
+                        true
+                );
+                System.out.println("UserService: Added bank account " + externalBankAccount.getId() + " to Connected Account: " + connectedAccountId);
+
+                stripeAccount = stripeService.requestCapabilitiesForConnectedAccount(connectedAccountId, List.of("transfers"));
+                System.out.println("UserService: Ensured 'transfers' capability for Connected Account: " + connectedAccountId);
+            } else {
+                System.out.println("UserService: Found existing Stripe Connected Account ID: " + connectedAccountId + " for user: " + user.getId());
+                stripeAccount = Account.retrieve(connectedAccountId);
+            }
+
+            if (!stripeAccount.getPayoutsEnabled()) {
+                String requirementsDetails = stripeAccount.getRequirements() != null ? stripeAccount.getRequirements().toString() : "N/A";
+                System.err.println("UserService WARNING: Stripe Connected Account " + connectedAccountId + " is not enabled for payouts. PayoutsEnabled: " + stripeAccount.getPayoutsEnabled() + ". Requirements: " + requirementsDetails);
+                if (stripeAccount.getRequirements() != null && !stripeAccount.getRequirements().getCurrentlyDue().isEmpty()){
+                    String missingFields = String.join(", ", stripeAccount.getRequirements().getCurrentlyDue());
+                    throw new PaymentProcessingException("Stripe Connected Account requires more information to enable payouts: " + missingFields + ". Please update your account details.");
+                } else if (!stripeAccount.getPayoutsEnabled()) {
+                    throw new PaymentProcessingException("Stripe Connected Account payouts are not enabled. Please check account status and requirements in Stripe dashboard or contact support. Details: " + requirementsDetails);
+                }
+            }
+
+            if (stripeAccount.getExternalAccounts() == null || stripeAccount.getExternalAccounts().getData().isEmpty()) {
+                System.err.println("UserService ERROR: No external bank account found on Connected Account: " + connectedAccountId + ". Cannot make transfer.");
+                throw new PaymentProcessingException("Stripe Connect account setup incomplete: Missing bank account on Stripe Connected Account. Please add a bank account.");
+            }
+
+            long amountInSmallestUnit = Math.round(amountToWithdraw * 100);
+            Map<String, String> transferMetadata = Map.of(
+                    "internal_withdrawal_id", withdrawal.getId(),
+                    "platform_user_id", user.getId(),
+                    "withdrawal_type", "ALL_PARKING_LOTS",
+                    "initiated_by_user_login", "simonaAMH"
+            );
+            String transferGroup = "WITHDRAWAL-" + withdrawal.getId();
+
+            System.out.println("UserService: Attempting to transfer " + amountInSmallestUnit + " RON to Connected Account: " + connectedAccountId + " for withdrawal: " + withdrawal.getId());
+            Transfer stripeTransfer = stripeService.createTransferToDestination(
+                    amountInSmallestUnit,
+                    "RON",
+                    connectedAccountId,
+                    transferMetadata,
+                    transferGroup
+            );
+
+            // SUCCESS: Update withdrawal status to COMPLETED
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.COMPLETED);
+            withdrawal.setStripePayoutId(stripeTransfer.getId());
+            withdrawal.setProcessedAt(OffsetDateTime.now());
+
+            // Update user earnings
+            Double currentPending = Optional.ofNullable(user.getPendingEarnings()).orElse(0.0);
+            Double currentPaid = Optional.ofNullable(user.getPaidEarnings()).orElse(0.0);
+            user.setPendingEarnings(Math.max(0, currentPending - amountToWithdraw));
+            user.setPaidEarnings(currentPaid + amountToWithdraw);
+
+            // Save both entities
+            withdrawal = withdrawalRepository.save(withdrawal);
+            userRepository.save(user);
+
+            // Send confirmation email
+            List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
+            String parkingLotNames = userParkingLots.stream()
+                    .map(ParkingLot::getName)
+                    .collect(Collectors.joining(", "));
+
+            emailService.sendWithdrawalConfirmationEmail(
+                    user.getEmail(),
+                    withdrawal.getId(),
+                    amountToWithdraw,
+                    user.getBankAccountNumber(),
+                    "All Parking Lots (" + parkingLotNames + ")"
+            );
+
+            return convertToWithdrawalResponseDTO(withdrawal);
+
+        } catch (StripeException e) {
+            String errorMessage = getStripeErrorMessage(e);
+            System.err.println("UserService StripeException during Connect withdrawal for ID " + withdrawal.getId() + ": " + errorMessage);
+
+            // Update withdrawal to failed in same transaction
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            withdrawal.setFailureReason("Stripe Error: " + errorMessage);
+            withdrawalRepository.save(withdrawal);
+
+            throw new PaymentProcessingException(errorMessage);
+
+        } catch (PaymentProcessingException ppe) {
+            System.err.println("UserService PaymentProcessingException during Connect withdrawal for ID " + withdrawal.getId() + ": " + ppe.getMessage());
+
+            // Update withdrawal to failed in same transaction
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            withdrawal.setFailureReason(ppe.getMessage());
+            withdrawalRepository.save(withdrawal);
+
+            throw ppe;
+
+        } catch (Exception e) {
+            System.err.println("UserService General Exception during Connect withdrawal for ID " + withdrawal.getId() + ": " + e.getMessage());
+
+            // Update withdrawal to failed in same transaction
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            withdrawal.setFailureReason("General Error: " + e.getMessage());
+            withdrawalRepository.save(withdrawal);
+
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            throw new PaymentProcessingException("Withdrawal processing failed due to an unexpected error: " + e.getMessage());
+        }
     }
 
     @Transactional
@@ -347,19 +536,13 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
-        final Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
-                .orElseGet(() -> Withdrawal.builder()
-                        .id(withdrawalId)
-                        .user(user)
-                        .parkingLot(null) // No specific parking lot - withdrawal for all earnings
-                        .amount(amountToWithdraw)
-                        .bankAccountName(user.getBankAccountName())
-                        .bankAccountNumber(user.getBankAccountNumber())
-                        .status(Withdrawal.WithdrawalStatus.PENDING)
-                        .requestedAt(OffsetDateTime.now())
-                        .build());
+        // Always get fresh withdrawal from database
+        Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found: " + withdrawalId));
 
+        // Update status to PROCESSING
         withdrawal.setStatus(Withdrawal.WithdrawalStatus.PROCESSING);
+        withdrawal = withdrawalRepository.saveAndFlush(withdrawal);
 
         try {
             String connectedAccountId = user.getStripeConnectedAccountId();
@@ -458,16 +641,55 @@ public class UserService {
                     transferGroup
             );
 
+            // SUCCESS: Update withdrawal status to COMPLETED
+            return updateWithdrawalToCompleted(withdrawalId, stripeTransfer.getId(), user, amountToWithdraw);
+
+        } catch (StripeException e) {
+            String errorMessage = getStripeErrorMessage(e);
+            System.err.println("UserService StripeException during Connect withdrawal for ID " + withdrawal.getId() + ": " + errorMessage);
+            updateWithdrawalToFailed(withdrawalId, "Stripe Error: " + errorMessage);
+            throw new PaymentProcessingException(errorMessage);
+
+        } catch (PaymentProcessingException ppe) {
+            System.err.println("UserService PaymentProcessingException during Connect withdrawal for ID " + withdrawal.getId() + ": " + ppe.getMessage());
+            updateWithdrawalToFailed(withdrawalId, ppe.getMessage());
+            throw ppe;
+
+        } catch (Exception e) {
+            System.err.println("UserService General Exception during Connect withdrawal for ID " + withdrawal.getId() + ": " + e.getMessage());
+            updateWithdrawalToFailed(withdrawalId, "General Error: " + e.getMessage());
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            throw new PaymentProcessingException("Withdrawal processing failed due to an unexpected error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Update withdrawal to completed status in a separate transaction
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public WithdrawalResponseDTO updateWithdrawalToCompleted(String withdrawalId, String stripePayoutId, User user, Double amountToWithdraw) {
+        try {
+            // Get fresh withdrawal from database
+            Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found: " + withdrawalId));
+
             withdrawal.setStatus(Withdrawal.WithdrawalStatus.COMPLETED);
-            withdrawal.setStripePayoutId(stripeTransfer.getId());
+            withdrawal.setStripePayoutId(stripePayoutId);
             withdrawal.setProcessedAt(OffsetDateTime.now());
 
+            // Update user earnings
             Double currentPending = Optional.ofNullable(user.getPendingEarnings()).orElse(0.0);
             Double currentPaid = Optional.ofNullable(user.getPaidEarnings()).orElse(0.0);
             user.setPendingEarnings(Math.max(0, currentPending - amountToWithdraw));
             user.setPaidEarnings(currentPaid + amountToWithdraw);
 
-            // Get all parking lot names for the email
+            // Save both entities
+            withdrawal = withdrawalRepository.saveAndFlush(withdrawal);
+            userRepository.saveAndFlush(user);
+
+            // Send confirmation email
             List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
             String parkingLotNames = userParkingLots.stream()
                     .map(ParkingLot::getName)
@@ -481,43 +703,47 @@ public class UserService {
                     "All Parking Lots (" + parkingLotNames + ")"
             );
 
-        } catch (StripeException e) {
-            String stripeErrorMessage = "Stripe Error: An unexpected error occurred.";
-            if (e.getStripeError() != null && e.getStripeError().getMessage() != null) {
-                stripeErrorMessage = e.getStripeError().getMessage();
-            } else if (e.getMessage() != null) {
-                stripeErrorMessage = e.getMessage();
-            }
-            System.err.println("UserService StripeException during Connect withdrawal for ID " + withdrawal.getId() + ": " + stripeErrorMessage + (e.getRequestId() != null ? " | Request ID: " + e.getRequestId() : ""));
+            return convertToWithdrawalResponseDTO(withdrawal);
 
-            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
-            withdrawal.setFailureReason("Stripe Error: " + stripeErrorMessage);
-
-            throw new PaymentProcessingException(stripeErrorMessage);
-        } catch (PaymentProcessingException ppe) {
-            System.err.println("UserService PaymentProcessingException during Connect withdrawal for ID " + withdrawal.getId() + ": " + ppe.getMessage());
-            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
-            withdrawal.setFailureReason(ppe.getMessage());
-            throw ppe;
+        } catch (Exception e) {
+            System.err.println("UserService: Error updating withdrawal to completed for ID " + withdrawalId + ": " + e.getMessage());
+            throw new PaymentProcessingException("Failed to complete withdrawal update: " + e.getMessage());
         }
-        catch (Exception e) {
-            System.err.println("UserService General Exception during Connect withdrawal for ID " + withdrawal.getId() + ": " + e.getMessage());
-            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
-            withdrawal.setFailureReason("General Error: " + e.getMessage());
-            if (e instanceof RuntimeException) {
-                throw (RuntimeException) e;
-            }
-            throw new PaymentProcessingException("Withdrawal processing failed due to an unexpected error: " + e.getMessage());
-        } finally {
-            System.out.println("UserService: Saving final state of Withdrawal ID: " + withdrawal.getId() + " with Status: " + withdrawal.getStatus());
-            try {
-                withdrawalRepository.saveAndFlush(withdrawal);
-            } catch (Exception exInFinally) {
-                System.err.println("UserService: Error saving withdrawal state in finally block for ID " + withdrawal.getId() + ": " + exInFinally.getMessage());
-            }
-        }
+    }
 
-        return convertToWithdrawalResponseDTO(withdrawal);
+    /**
+     * Update withdrawal to failed status in a separate transaction
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateWithdrawalToFailed(String withdrawalId, String failureReason) {
+        try {
+            // Get fresh withdrawal from database
+            Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Withdrawal not found: " + withdrawalId));
+
+            withdrawal.setStatus(Withdrawal.WithdrawalStatus.FAILED);
+            withdrawal.setFailureReason(failureReason);
+
+            withdrawalRepository.saveAndFlush(withdrawal);
+            System.out.println("UserService: Updated withdrawal " + withdrawalId + " to FAILED status");
+
+        } catch (Exception e) {
+            System.err.println("UserService: Error updating withdrawal to failed for ID " + withdrawalId + ": " + e.getMessage());
+            // Don't throw here to avoid masking the original exception
+        }
+    }
+
+    /**
+     * Extract error message from StripeException
+     */
+    private String getStripeErrorMessage(StripeException e) {
+        if (e.getStripeError() != null && e.getStripeError().getMessage() != null) {
+            return e.getStripeError().getMessage();
+        } else if (e.getMessage() != null) {
+            return e.getMessage();
+        } else {
+            return "Stripe Error: An unexpected error occurred.";
+        }
     }
 
     @Transactional(readOnly = true)
@@ -618,8 +844,6 @@ public class UserService {
         return WithdrawalResponseDTO.builder()
                 .id(withdrawal.getId())
                 .userId(withdrawal.getUser().getId())
-                .parkingLotId(withdrawal.getParkingLot().getId())
-                .parkingLotName(withdrawal.getParkingLot().getName())
                 .amount(withdrawal.getAmount())
                 .bankAccountName(withdrawal.getBankAccountName())
                 .bankAccountNumber(withdrawal.getBankAccountNumber())
