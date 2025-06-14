@@ -1060,23 +1060,25 @@ public class ReservationService {
                 user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsToUse));
             }
             reservation.setPointsUsed(pointsToUse);
-            // finalAmount on reservation should reflect what the customer paid after points
             reservation.setFinalAmount(finalAmountCustomerPays);
 
-            // IMPORTANT: Update owner's pending earnings with the NET amount after Stripe fees
+            System.out.println("Reservation ID: " + reservationId + " - Checking owner earnings update.");
+            System.out.println("Owner: " + (owner != null ? owner.getUsername() : "null"));
+            System.out.println("Final Amount Customer Pays: " + finalAmountCustomerPays);
+            System.out.println("Net Amount For Owner (calculated): " + netAmountForOwner);
+
             if (owner != null && netAmountForOwner > 0) {
                 Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
                 Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
 
-                // Add the net amount (after Stripe fees) to pending earnings
                 owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
-                // Total earnings could also track net, or gross depending on your accounting model
-                // For consistency, let's assume total earnings also track amounts that will actually be paid out (net).
                 owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
                 System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
+                System.out.println("Updating pending earnings for owner: " + owner.getUsername() + " by " + netAmountForOwner);
+            } else {
+                System.out.println("Skipping pending earnings update for reservation " + reservationId + ". Owner is null or netAmountForOwner is not positive.");
             }
 
-            // Award loyalty points based on what the customer actually paid (finalAmountCustomerPays)
             if (user != null && finalAmountCustomerPays > 0) {
                 double pointsToAddUnrounded = finalAmountCustomerPays * 0.05;
                 BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
