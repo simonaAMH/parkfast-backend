@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -306,15 +307,14 @@ public class UserService {
 
 
     @Transactional
-    public WithdrawalResponseDTO requestWithdrawal(String userId, WithdrawalRequestDTO withdrawalRequest) {
+    public WithdrawalResponseDTO requestWithdrawal(String userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
-        ParkingLot parkingLot = parkingLotRepository.findById(withdrawalRequest.getParkingLotId())
-                .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found: " + withdrawalRequest.getParkingLotId()));
-
-        if (!parkingLot.getOwner().getId().equals(userId)) {
-            throw new InvalidDataException("You are not the owner of this parking lot.");
+        // Verify user owns at least one parking lot
+        List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
+        if (userParkingLots.isEmpty()) {
+            throw new InvalidDataException("You don't own any parking lots.");
         }
 
         if (user.getBankAccountName() == null || user.getBankAccountName().trim().isEmpty() ||
@@ -327,35 +327,32 @@ public class UserService {
             throw new InvalidDataException("No pending earnings available for withdrawal.");
         }
 
-        boolean hasPendingWithdrawal = withdrawalRepository.existsByUserIdAndParkingLotIdAndStatusIn(
+        // Check for any pending withdrawal for this user (across all parking lots)
+        boolean hasPendingWithdrawal = withdrawalRepository.existsByUserIdAndStatusIn(
                 userId,
-                parkingLot.getId(),
                 List.of(Withdrawal.WithdrawalStatus.PENDING, Withdrawal.WithdrawalStatus.PROCESSING)
         );
 
         if (hasPendingWithdrawal) {
-            throw new InvalidDataException("There is already a pending withdrawal request for this parking lot.");
+            throw new InvalidDataException("You already have a pending withdrawal request. Please wait for it to complete before requesting another withdrawal.");
         }
 
         String withdrawalId = UUID.randomUUID().toString();
 
-        return processWithdrawalPayment(userId, withdrawalId, parkingLot.getId(), pendingEarnings);
+        return processWithdrawalPayment(userId, withdrawalId, null, pendingEarnings);
     }
 
     @Transactional
     public WithdrawalResponseDTO processWithdrawalPayment(String userId, String withdrawalId, String parkingLotId, Double amountToWithdraw) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
-        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
-                .orElseThrow(() -> new ResourceNotFoundException("Parking lot not found: " + parkingLotId));
 
         final Withdrawal withdrawal = withdrawalRepository.findById(withdrawalId)
                 .orElseGet(() -> Withdrawal.builder()
                         .id(withdrawalId)
                         .user(user)
-                        .parkingLot(parkingLot)
+                        .parkingLot(null) // No specific parking lot - withdrawal for all earnings
                         .amount(amountToWithdraw)
-                        // CHANGED: Use user's bank account details instead of parking lot's
                         .bankAccountName(user.getBankAccountName())
                         .bankAccountNumber(user.getBankAccountNumber())
                         .status(Withdrawal.WithdrawalStatus.PENDING)
@@ -365,7 +362,6 @@ public class UserService {
         withdrawal.setStatus(Withdrawal.WithdrawalStatus.PROCESSING);
 
         try {
-            // CHANGED: Get connected account ID from user instead of parking lot
             String connectedAccountId = user.getStripeConnectedAccountId();
             Account stripeAccount;
 
@@ -373,7 +369,6 @@ public class UserService {
                 System.out.println("UserService: No Stripe Connected Account found for user: " + user.getId() + ". Creating one.");
                 stripeAccount = stripeService.createCustomConnectedAccount(user.getEmail(), "RO");
                 connectedAccountId = stripeAccount.getId();
-                // CHANGED: Set connected account ID on user instead of parking lot
                 user.setStripeConnectedAccountId(connectedAccountId);
                 System.out.println("UserService: Created Stripe Connected Account ID: " + connectedAccountId + " for user: " + user.getId() + ". User will be saved by transaction.");
 
@@ -414,7 +409,6 @@ public class UserService {
                 );
                 System.out.println("UserService: Updated ToS acceptance for Connected Account: " + connectedAccountId);
 
-                // CHANGED: Use user's bank account details instead of parking lot's
                 System.out.println("UserService: Adding IBAN " + user.getBankAccountNumber() + " for " + user.getBankAccountName() + " to Connected Account " + connectedAccountId);
                 BankAccount externalBankAccount = stripeService.addExternalBankAccountToConnectedAccount(
                         connectedAccountId,
@@ -450,7 +444,7 @@ public class UserService {
             Map<String, String> transferMetadata = Map.of(
                     "internal_withdrawal_id", withdrawal.getId(),
                     "platform_user_id", user.getId(),
-                    "parking_lot_id", parkingLot.getId(),
+                    "withdrawal_type", "ALL_PARKING_LOTS",
                     "initiated_by_user_login", "simonaAMH"
             );
             String transferGroup = "WITHDRAWAL-" + withdrawal.getId();
@@ -473,12 +467,18 @@ public class UserService {
             user.setPendingEarnings(Math.max(0, currentPending - amountToWithdraw));
             user.setPaidEarnings(currentPaid + amountToWithdraw);
 
+            // Get all parking lot names for the email
+            List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
+            String parkingLotNames = userParkingLots.stream()
+                    .map(ParkingLot::getName)
+                    .collect(Collectors.joining(", "));
+
             emailService.sendWithdrawalConfirmationEmail(
                     user.getEmail(),
                     withdrawal.getId(),
                     amountToWithdraw,
                     user.getBankAccountNumber(),
-                    parkingLot.getName()
+                    "All Parking Lots (" + parkingLotNames + ")"
             );
 
         } catch (StripeException e) {
@@ -545,37 +545,47 @@ public class UserService {
 
         List<ParkingLot> userParkingLots = parkingLotRepository.findByOwner(user);
 
-        List<ParkingLotWithdrawalInfoDTO> availableParkingLots = userParkingLots.stream()
-                .map(lot -> {
-                    boolean canWithdraw = user.getBankAccountName() != null && !user.getBankAccountName().isBlank() &&
-                            user.getBankAccountNumber() != null && !user.getBankAccountNumber().isBlank() &&
-                            user.getPendingEarnings() != null &&
-                            user.getPendingEarnings() > 0;
+        // Create a single withdrawal info object representing all parking lots
+        boolean canWithdraw = user.getBankAccountName() != null && !user.getBankAccountName().isBlank() &&
+                user.getBankAccountNumber() != null && !user.getBankAccountNumber().isBlank() &&
+                user.getPendingEarnings() != null &&
+                user.getPendingEarnings() > 0 &&
+                !userParkingLots.isEmpty();
 
-                    String blockReason = null;
-                    if (user.getBankAccountName() == null || user.getBankAccountName().isBlank() ||
-                            user.getBankAccountNumber() == null || user.getBankAccountNumber().isBlank()) {
-                        blockReason = "Bank account details not configured in your profile. Please update your account settings.";
-                    } else if (user.getPendingEarnings() == null || user.getPendingEarnings() <= 0) {
-                        blockReason = "No pending earnings available for withdrawal.";
-                    } else if (withdrawalRepository.existsByUserIdAndParkingLotIdAndStatusIn(userId, lot.getId(), List.of(Withdrawal.WithdrawalStatus.PENDING, Withdrawal.WithdrawalStatus.PROCESSING))) {
-                        blockReason = "There is already a pending or processing withdrawal for this parking lot.";
-                        canWithdraw = false;
-                    }
+        String blockReason = null;
+        if (userParkingLots.isEmpty()) {
+            blockReason = "You don't own any parking lots.";
+            canWithdraw = false;
+        } else if (user.getBankAccountName() == null || user.getBankAccountName().isBlank() ||
+                user.getBankAccountNumber() == null || user.getBankAccountNumber().isBlank()) {
+            blockReason = "Bank account details not configured in your profile. Please update your account settings.";
+            canWithdraw = false;
+        } else if (user.getPendingEarnings() == null || user.getPendingEarnings() <= 0) {
+            blockReason = "No pending earnings available for withdrawal.";
+            canWithdraw = false;
+        } else if (withdrawalRepository.existsByUserIdAndStatusIn(userId, List.of(Withdrawal.WithdrawalStatus.PENDING, Withdrawal.WithdrawalStatus.PROCESSING))) {
+            blockReason = "You already have a pending or processing withdrawal. Please wait for it to complete.";
+            canWithdraw = false;
+        }
 
-                    return ParkingLotWithdrawalInfoDTO.builder()
-                            .id(lot.getId())
-                            .name(lot.getName())
-                            .address(lot.getAddress())
-                            // CHANGED: Use user's bank account details instead of parking lot's
-                            .bankAccountName(user.getBankAccountName())
-                            .bankAccountNumber(user.getBankAccountNumber())
-                            .pendingEarnings(user.getPendingEarnings())
-                            .canWithdraw(canWithdraw)
-                            .withdrawalBlockReason(blockReason)
-                            .build();
-                })
-                .toList();
+        String allParkingLotNames = userParkingLots.stream()
+                .map(ParkingLot::getName)
+                .collect(Collectors.joining(", "));
+
+        String allParkingLotAddresses = userParkingLots.stream()
+                .map(ParkingLot::getAddress)
+                .collect(Collectors.joining("; "));
+
+        ParkingLotWithdrawalInfoDTO withdrawalInfo = ParkingLotWithdrawalInfoDTO.builder()
+                .id("ALL") // Special ID to indicate all parking lots
+                .name("All Parking Lots (" + allParkingLotNames + ")")
+                .address(allParkingLotAddresses)
+                .bankAccountName(user.getBankAccountName())
+                .bankAccountNumber(user.getBankAccountNumber())
+                .pendingEarnings(user.getPendingEarnings())
+                .canWithdraw(canWithdraw)
+                .withdrawalBlockReason(blockReason)
+                .build();
 
         return WithdrawalSummaryDTO.builder()
                 .totalPendingEarnings(user.getPendingEarnings())
@@ -584,7 +594,7 @@ public class UserService {
                 .recentWithdrawals(recentWithdrawals.stream()
                         .map(this::convertToWithdrawalResponseDTO)
                         .toList())
-                .availableParkingLots(availableParkingLots)
+                .availableParkingLots(List.of(withdrawalInfo)) // Single item representing all parking lots
                 .build();
     }
 

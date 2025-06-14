@@ -326,8 +326,7 @@ public class UserController {
 
     @PostMapping("/{userId}/withdrawals")
     public ResponseEntity<ApiResponse<WithdrawalResponseDTO>> requestWithdrawal(
-            @PathVariable String userId,
-            @Valid @RequestBody WithdrawalRequestDTO withdrawalRequest) {
+            @PathVariable String userId) {
 
         User currentUser = userService.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Current user not found"));
@@ -336,7 +335,7 @@ public class UserController {
             throw new InvalidDataException("You can only request withdrawals for your own account");
         }
 
-        WithdrawalResponseDTO withdrawal = userService.requestWithdrawal(userId, withdrawalRequest);
+        WithdrawalResponseDTO withdrawal = userService.requestWithdrawal(userId);
 
         ApiResponse<WithdrawalResponseDTO> response = new ApiResponse<>(
                 true,

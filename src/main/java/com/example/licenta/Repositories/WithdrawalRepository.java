@@ -18,6 +18,8 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, String> 
 
     Page<Withdrawal> findByUserIdOrderByRequestedAtDesc(String userId, Pageable pageable);
 
+    boolean existsByUserIdAndStatusIn(String userId, List<Withdrawal.WithdrawalStatus> statuses);
+
     Page<Withdrawal> findByUserIdAndStatusOrderByRequestedAtDesc(String userId, WithdrawalStatus status, Pageable pageable);
 
     List<Withdrawal> findByUserIdAndRequestedAtAfterOrderByRequestedAtDesc(String userId, OffsetDateTime after);
