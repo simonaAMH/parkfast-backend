@@ -241,6 +241,14 @@ public class UserService {
             user.setRole(updateDto.getRole());
         }
 
+        if (updateDto.getBankAccountName() != null) {
+            user.setBankAccountName(updateDto.getBankAccountName());
+        }
+
+        if (updateDto.getBankAccountNumber() != null) {
+            user.setBankAccountNumber(updateDto.getBankAccountNumber());
+        }
+
         user.setUpdatedAt(OffsetDateTime.now());
         return userRepository.save(user);
     }

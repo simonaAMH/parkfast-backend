@@ -18,6 +18,8 @@ public class UserDTO {
     private Double pendingEarnings;
     private Double totalEarnings;
     private Double paidEarnings;
+    private String bankAccountName;
+    private String bankAccountNumber;
     private Role role;
     private Double loyaltyPoints;
     private boolean emailVerified;
