@@ -430,6 +430,8 @@ public class UserController {
         dto.setPaidEarnings(user.getPaidEarnings());
         dto.setPendingEarnings(user.getPendingEarnings());
         dto.setTotalEarnings(user.getTotalEarnings());
+        dto.setBankAccountName(user.getBankAccountName());
+        dto.setBankAccountNumber(user.getBankAccountNumber());
         return dto;
     }
 
