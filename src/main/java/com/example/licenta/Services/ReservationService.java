@@ -703,7 +703,6 @@ public class ReservationService {
                     throw new PaymentProcessingException("Stripe card setup verification failed. Status: " + setupIntent.getStatus());
                 }
             }
-            // Else, this confirmation is for a PaymentIntent (Standard/Direct payment or PFU billing)
             else if (reservation.getStripePaymentIntentId() != null) {
                 PaymentIntent paymentIntent = stripeService.retrievePaymentIntent(reservation.getStripePaymentIntentId());
 
@@ -726,40 +725,7 @@ public class ReservationService {
                         user.setLoyaltyPoints(currentLoyaltyPointsAfterDeduction + pointsToAdd);
                     }
 
-                    // ADD THIS: Update owner earnings for successful payments
-                    if (finalAmountPaid > 0 && parkingLot != null && parkingLot.getOwner() != null) {
-                        User owner = parkingLot.getOwner();
-
-                        Double netAmountForOwner = 0.0; // Rough calculation
-
-
-                        if (paymentIntent.getLatestCharge() != null) {
-                            Charge charge = paymentIntent.getLatestChargeObject();
-                            if (charge.getBalanceTransaction() != null) {
-                                BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(charge.getBalanceTransaction());
-                                netAmountForOwner = balanceTransaction.getNet() / 100.0; // Convert from cents
-                            }
-                        }
-
-                        if (netAmountForOwner < 0) netAmountForOwner = 0.0;
-
-                        if (netAmountForOwner > 0) {
-                            Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
-                            Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
-
-                            owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings)
-                                    .add(BigDecimal.valueOf(netAmountForOwner))
-                                    .setScale(2, RoundingMode.HALF_UP)
-                                    .doubleValue());
-                            owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings)
-                                    .add(BigDecimal.valueOf(netAmountForOwner))
-                                    .setScale(2, RoundingMode.HALF_UP)
-                                    .doubleValue());
-
-                            userRepository.save(owner);
-                            System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
-                        }
-                    }
+                    // REMOVED: Owner earnings logic - now handled by webhook service
 
                     // Handle payment method saving for future use
                     String paymentMethodIdFromPI = paymentIntent.getPaymentMethod();
@@ -835,7 +801,6 @@ public class ReservationService {
             reservation.setFinalAmount(totalAmount); // What they owe
             reservation.setStatus(ReservationStatus.PAYMENT_FAILED); // Cannot charge automatically
             reservationRepository.save(reservation);
-            // Potentially send an email to user to manually pay / update card
             throw new PaymentProcessingException("Payment method not saved for this Pay For Usage session. Cannot process automatic payment.");
         }
 
@@ -884,9 +849,6 @@ public class ReservationService {
             else if ("requires_action".equals(stripeResponse.getStatus()) || "requires_confirmation".equals(stripeResponse.getStatus())) {
                 dto.setStripeClientSecret(stripeResponse.getClientSecret());
                 dto.setStripeOperationType("PAYMENT_INTENT_REQUIRES_ACTION");
-                // Frontend will need to use this client_secret to guide user through SCA
-                // Or, send an email to the user with a link to authenticate the payment.
-                // For this flow, frontend might need to poll or user needs to check app/email.
             } else if ("processing".equals(stripeResponse.getStatus())){
                 dto.setStripeOperationType("PAYMENT_INTENT_PROCESSING");
             }

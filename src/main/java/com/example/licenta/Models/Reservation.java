@@ -102,6 +102,9 @@ public class Reservation {
     @Column(name = "stripe_payment_intent_id")
     private String stripePaymentIntentId;
 
+    @Column(name = "owner_earnings_processed")
+    private Boolean ownerEarningsProcessed = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
