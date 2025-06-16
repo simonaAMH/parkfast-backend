@@ -72,7 +72,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/webhooks/**").permitAll()
+                        .requestMatchers("/api/webhooks/**").permitAll() //!!!
                         .requestMatchers(
                                 "/.well-known/**",
                                 "/api/users/register",
