@@ -34,6 +34,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         String method = request.getMethod();
 
+        logger.info("=== DEBUGGING shouldNotFilter ===");
+        logger.info("Path: '{}', Method: '{}'", path, method);
+        logger.info("Checking webhook condition: path.startsWith('/api/webhooks/') = {}", path.startsWith("/api/webhooks/"));
+
+
         if (path.equals("/api/users/register") ||
                 path.equals("/api/users/login") ||
                 path.equals("/api/users/verify-email") ||
