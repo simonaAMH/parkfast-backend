@@ -207,23 +207,6 @@ public class StripeService {
         return transfer;
     }
 
-    public Charge createPlatformCharge(long amount, String description) throws StripeException {
-        Map<String, Object> chargeParams = new HashMap<>();
-        chargeParams.put("amount", amount);
-        chargeParams.put("currency", "RON");
-        chargeParams.put("source", "tok_visa");
-        chargeParams.put("description", description);
-
-        RequestOptions requestOptions = RequestOptions.builder()
-                .setIdempotencyKey("charge-" + UUID.randomUUID().toString())
-                .build();
-
-        System.out.println("StripeService: Attempting to create platform charge for amount: " + amount + " " + "RON");
-        Charge charge = Charge.create(chargeParams, requestOptions);
-        System.out.println("StripeService: Successfully created platform Charge ID: " + charge.getId() + ", Status: " + charge.getStatus());
-        return charge;
-    }
-
     public String getOrCreateStripeCustomerId(User user, String guestEmail) throws StripeException {
         if (user != null && user.getStripeCustomerId() != null && !user.getStripeCustomerId().isEmpty()) {
             try {
@@ -247,6 +230,101 @@ public class StripeService {
         }
         Customer customer = Customer.create(customerParamsBuilder.build());
         return customer.getId();
+    }
+
+    public StripeIntentResponse createSetupIntentForCardVerification(String stripeCustomerId, Map<String, String> metadata) throws StripeException {
+        SetupIntentCreateParams.Builder paramsBuilder = SetupIntentCreateParams.builder()
+                .setCustomer(stripeCustomerId)
+                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION) // For future off-session payments
+                .setAutomaticPaymentMethods(
+                        SetupIntentCreateParams.AutomaticPaymentMethods.builder()
+                                .setEnabled(true)
+                                .build()
+                );
+
+        if (metadata != null && !metadata.isEmpty()) {
+            paramsBuilder.putAllMetadata(metadata);
+        }
+
+        RequestOptions requestOptions = RequestOptions.builder()
+                .setIdempotencyKey("si-" + UUID.randomUUID().toString())
+                .build();
+
+        SetupIntent setupIntent = SetupIntent.create(paramsBuilder.build(), requestOptions);
+        System.out.println("StripeService: Created SetupIntent ID: " + setupIntent.getId() + " for card verification");
+
+        return new StripeIntentResponse(setupIntent.getClientSecret(), setupIntent.getId(), setupIntent.getStatus());
+    }
+
+    public StripeIntentResponse createPaymentIntentWithSavedPaymentMethod(
+            long amountInSmallestUnit,
+            String currency,
+            String stripeCustomerId,
+            String savedPaymentMethodId,
+            Map<String, String> metadata) throws StripeException {
+
+        PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
+                .setAmount(amountInSmallestUnit)
+                .setCurrency(currency.toLowerCase())
+                .setCustomer(stripeCustomerId)
+                .setPaymentMethod(savedPaymentMethodId)
+                .setOffSession(true) // This is an off-session payment using saved payment method
+                .setConfirm(true); // Automatically confirm the payment
+
+        if (metadata != null && !metadata.isEmpty()) {
+            paramsBuilder.putAllMetadata(metadata);
+        }
+
+        RequestOptions requestOptions = RequestOptions.builder()
+                .setIdempotencyKey("pi-off-session-" + UUID.randomUUID().toString())
+                .build();
+
+        try {
+            PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
+            System.out.println("StripeService: Created off-session PaymentIntent ID: " + paymentIntent.getId() +
+                    ", Status: " + paymentIntent.getStatus());
+
+            return new StripeIntentResponse(paymentIntent.getClientSecret(), paymentIntent.getId(), paymentIntent.getStatus());
+        } catch (StripeException e) {
+            // Handle authentication required for off-session payments
+            if ("authentication_required".equals(e.getCode())) {
+                System.out.println("StripeService: Authentication required for off-session payment, creating on-session PaymentIntent");
+
+                // Create on-session PaymentIntent that requires customer authentication
+                paramsBuilder.setOffSession(false).setConfirm(false);
+                PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
+
+                return new StripeIntentResponse(paymentIntent.getClientSecret(), paymentIntent.getId(), paymentIntent.getStatus());
+            }
+            throw e;
+        }
+    }
+
+    public List<PaymentMethod> getCustomerPaymentMethods(String stripeCustomerId) throws StripeException {
+        PaymentMethodListParams params = PaymentMethodListParams.builder()
+                .setCustomer(stripeCustomerId)
+                .setType(PaymentMethodListParams.Type.CARD)
+                .build();
+
+        PaymentMethodCollection paymentMethods = PaymentMethod.list(params);
+        return paymentMethods.getData();
+    }
+
+    public PaymentMethod getCustomerDefaultPaymentMethod(String stripeCustomerId) throws StripeException {
+        Customer customer = Customer.retrieve(stripeCustomerId);
+
+        if (customer.getInvoiceSettings() != null &&
+                customer.getInvoiceSettings().getDefaultPaymentMethod() != null) {
+            return PaymentMethod.retrieve(customer.getInvoiceSettings().getDefaultPaymentMethod());
+        }
+
+        // Fallback: get the most recently created payment method
+        List<PaymentMethod> paymentMethods = getCustomerPaymentMethods(stripeCustomerId);
+        if (!paymentMethods.isEmpty()) {
+            return paymentMethods.get(0);
+        }
+
+        return null;
     }
 
     public StripeIntentResponse createPaymentIntent(

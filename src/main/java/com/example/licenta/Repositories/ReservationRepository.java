@@ -22,6 +22,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     Page<Reservation> findByUserId(String userId, Pageable pageable);
     Page<Reservation> findByUserIdAndReservationTypeIn(String userId, List<ReservationType> types, Pageable pageable);
 
+    Optional<Reservation> findByStripeSetupIntentId(String stripeSetupIntentId);
+
     // For findActiveReservation and hasActiveOrUpcomingReservationForLot (STANDARD, DIRECT)
     Optional<Reservation> findFirstByUserIdAndReservationTypeAndStartTimeBeforeAndEndTimeAfterAndStatusOrderByStartTimeDesc(
             String userId, ReservationType type, OffsetDateTime now1, OffsetDateTime now2, ReservationStatus status);

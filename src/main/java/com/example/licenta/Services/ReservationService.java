@@ -1,6 +1,8 @@
 package com.example.licenta.Services;
 
 import com.example.licenta.DTOs.*;
+import com.example.licenta.Enum.ParkingLot.DayOfWeek;
+import com.example.licenta.Enum.ParkingLot.ExtensionPricingModel;
 import com.example.licenta.Enum.ParkingLot.PricingType;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
@@ -226,7 +228,7 @@ public class ReservationService {
             }
         } else {
             System.out.println("Pricing type is not DYNAMIC (" + parkingLot.getPricingType() + "). Using fallback price generation.");
-            return generateRandomPrice(parkingLotId, startTime, endTime);
+            return calculateFixedPrice(parkingLotId, startTime, endTime);
         }
     }
 
@@ -234,6 +236,310 @@ public class ReservationService {
         if (parkingLot.getTotalSpots() == null || parkingLot.getTotalSpots() == 0) return 0.0;
         int occupied = parkingLot.getTotalSpots() - parkingLot.getSpotsAvailable();
         return (occupied * 100.0) / parkingLot.getTotalSpots();
+    }
+
+    private Double calculateFixedPrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new RuntimeException("Parking lot not found"));
+
+        long totalMinutes = Duration.between(startTime, endTime).toMinutes();
+
+        OffsetDateTime billableStartTime = startTime;
+        if (parkingLot.isHasFreeTime() && parkingLot.getFreeTimeMinutes() != null && parkingLot.getFreeTimeMinutes() > 0) {
+            billableStartTime = startTime.plusMinutes(parkingLot.getFreeTimeMinutes());
+            if (billableStartTime.isAfter(endTime) || billableStartTime.isEqual(endTime)) {
+                return 0.0;
+            }
+        }
+
+        double totalPrice = 0.0;
+        OffsetDateTime currentTime = billableStartTime;
+
+        while (currentTime.isBefore(endTime)) {
+            DayOfWeek currentDay = getDayOfWeekFromOffsetDateTime(currentTime);
+
+            PriceInterval applicableInterval = findApplicablePriceInterval(
+                    parkingLot.getPriceIntervals(),
+                    currentTime,
+                    currentDay
+            );
+
+            if (applicableInterval == null) {
+                throw new RuntimeException("No price interval found for the given time and day");
+            }
+
+            OffsetDateTime intervalEndTime = getIntervalEndTime(currentTime, applicableInterval, endTime);
+            long intervalMinutes = Duration.between(currentTime, intervalEndTime).toMinutes();
+
+            if (applicableInterval.getDuration() != null && applicableInterval.getDuration() > 0) {
+                double durationUnits = Math.ceil((double) intervalMinutes / applicableInterval.getDuration());
+                totalPrice += durationUnits * applicableInterval.getPrice();
+            } else {
+                totalPrice += (intervalMinutes / 60.0) * applicableInterval.getPrice();
+            }
+
+            currentTime = intervalEndTime;
+        }
+
+        return totalPrice;
+    }
+
+    private DayOfWeek getDayOfWeekFromOffsetDateTime(OffsetDateTime dateTime) {
+        java.time.DayOfWeek javaDayOfWeek = dateTime.getDayOfWeek();
+        switch (javaDayOfWeek) {
+            case MONDAY: return DayOfWeek.MONDAY;
+            case TUESDAY: return DayOfWeek.TUESDAY;
+            case WEDNESDAY: return DayOfWeek.WEDNESDAY;
+            case THURSDAY: return DayOfWeek.THURSDAY;
+            case FRIDAY: return DayOfWeek.FRIDAY;
+            case SATURDAY: return DayOfWeek.SATURDAY;
+            case SUNDAY: return DayOfWeek.SUNDAY;
+            default: throw new RuntimeException("Invalid day of week");
+        }
+    }
+
+    private PriceInterval findApplicablePriceInterval(List<PriceInterval> intervals, OffsetDateTime currentTime, DayOfWeek dayOfWeek) {
+        String timeString = String.format("%02d:%02d", currentTime.getHour(), currentTime.getMinute());
+
+        for (PriceInterval interval : intervals) {
+            if (interval.getDays().contains(dayOfWeek)) {
+                if (isTimeWithinInterval(timeString, interval.getStartTime(), interval.getEndTime())) {
+                    return interval;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isTimeWithinInterval(String currentTime, String startTime, String endTime) {
+        int current = timeToMinutes(currentTime);
+        int start = timeToMinutes(startTime);
+        int end = timeToMinutes(endTime);
+
+        if (end < start) {
+            return current >= start || current < end;
+        } else {
+            return current >= start && current < end;
+        }
+    }
+
+    private int timeToMinutes(String time) {
+        String[] parts = time.split(":");
+        return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+    }
+
+    private OffsetDateTime getIntervalEndTime(OffsetDateTime currentTime, PriceInterval interval, OffsetDateTime endTime) {
+        String[] endTimeParts = interval.getEndTime().split(":");
+        int endHour = Integer.parseInt(endTimeParts[0]);
+        int endMinute = Integer.parseInt(endTimeParts[1]);
+
+        OffsetDateTime intervalEnd = currentTime.withHour(endHour).withMinute(endMinute).withSecond(0).withNano(0);
+
+        if (intervalEnd.isBefore(currentTime) || intervalEnd.isEqual(currentTime)) {
+            intervalEnd = intervalEnd.plusDays(1);
+        }
+
+        return intervalEnd.isBefore(endTime) ? intervalEnd : endTime;
+    }
+
+    public boolean canExtendReservation(String parkingLotId, ReservationType reservationType) {
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new RuntimeException("Parking lot not found"));
+
+        boolean isRegularReservation = reservationType == ReservationType.STANDARD || reservationType == ReservationType.DIRECT;
+
+        if (isRegularReservation) {
+            return parkingLot.isAllowExtensionsForRegular();
+        } else {
+            return parkingLot.isAllowExtensionsForOnTheSpot();
+        }
+    }
+
+    public Double calculateExtensionPrice(String parkingLotId, ReservationType reservationType,
+                                          OffsetDateTime originalEndTime, OffsetDateTime newEndTime) {
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new RuntimeException("Parking lot not found"));
+
+        if (!canExtendReservation(parkingLotId, reservationType)) {
+            throw new RuntimeException("Extensions not allowed for this reservation type");
+        }
+
+        boolean isRegularReservation = reservationType == ReservationType.STANDARD || reservationType == ReservationType.DIRECT;
+
+        long extensionMinutes = Duration.between(originalEndTime, newEndTime).toMinutes();
+
+        Integer maxExtensionTime = isRegularReservation ?
+                parkingLot.getMaxExtensionTimeForRegular() :
+                parkingLot.getMaxExtensionTimeForOnTheSpot();
+
+        if (maxExtensionTime != null && extensionMinutes > maxExtensionTime) {
+            throw new RuntimeException("Extension duration exceeds maximum allowed time");
+        }
+
+        Double baseExtensionPrice = calculateFixedPrice(parkingLotId, originalEndTime, newEndTime);
+
+        ExtensionPricingModel pricingModel = isRegularReservation ?
+                parkingLot.getExtensionPricingModelForRegular() :
+                parkingLot.getExtensionPricingModelForOnTheSpot();
+
+        Double pricingPercentage = isRegularReservation ?
+                parkingLot.getExtensionPricingPercentageForRegular() :
+                parkingLot.getExtensionPricingPercentageForOnTheSpot();
+
+        if (pricingModel == ExtensionPricingModel.HIGHER && pricingPercentage != null) {
+            baseExtensionPrice *= (1 + pricingPercentage / 100.0);
+        }
+
+        return baseExtensionPrice;
+    }
+
+    public boolean canCancelReservation(String parkingLotId, OffsetDateTime reservationStartTime,
+                                        OffsetDateTime currentTime, boolean hasReservationStarted) {
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new RuntimeException("Parking lot not found"));
+
+        if (!parkingLot.isAllowCancellations()) {
+            return false;
+        }
+
+        if (!hasReservationStarted) {
+            if (!parkingLot.isAllowPreReservationCancellations()) {
+                return false;
+            }
+
+            Integer cancelWindow = parkingLot.getPreReservationCancelWindow();
+            if (cancelWindow != null) {
+                long minutesUntilStart = Duration.between(currentTime, reservationStartTime).toMinutes();
+                return minutesUntilStart >= cancelWindow;
+            }
+            return true;
+        } else {
+            if (!parkingLot.isAllowMidReservationCancellations()) {
+                return false;
+            }
+
+            Integer cancelWindow = parkingLot.getMidReservationCancelWindow();
+            if (cancelWindow != null) {
+                long minutesSinceStart = Duration.between(reservationStartTime, currentTime).toMinutes();
+                return minutesSinceStart <= cancelWindow;
+            }
+            return true;
+        }
+    }
+
+    public Double calculateCancellationFee(String parkingLotId, OffsetDateTime reservationStartTime,
+                                           OffsetDateTime currentTime, boolean hasReservationStarted,
+                                           Double originalReservationPrice) {
+        ParkingLot parkingLot = parkingLotRepository.findById(parkingLotId)
+                .orElseThrow(() -> new RuntimeException("Parking lot not found"));
+
+        if (!canCancelReservation(parkingLotId, reservationStartTime, currentTime, hasReservationStarted)) {
+            throw new RuntimeException("Cancellation not allowed for this reservation");
+        }
+
+        Double cancellationFee = 0.0;
+
+        if (!hasReservationStarted) {
+            if (parkingLot.isApplyPreCancelFee() && parkingLot.getPreReservationCancelFee() != null) {
+                cancellationFee = parkingLot.getPreReservationCancelFee();
+            }
+        } else {
+            if (parkingLot.isApplyMidCancelFee() && parkingLot.getMidReservationCancelFee() != null) {
+                cancellationFee = parkingLot.getMidReservationCancelFee();
+            }
+        }
+
+        return cancellationFee;
+    }
+
+    public Double calculateTotalCancellationAmount(String parkingLotId, OffsetDateTime reservationStartTime,
+                                                   OffsetDateTime currentTime, boolean hasReservationStarted,
+                                                   Double originalReservationPrice) {
+        Double cancellationFee = calculateCancellationFee(parkingLotId, reservationStartTime,
+                currentTime, hasReservationStarted, originalReservationPrice);
+
+        if (!hasReservationStarted) {
+            return cancellationFee;
+        } else {
+            OffsetDateTime actualEndTime = currentTime;
+            Double usedTimePrice = calculateFixedPrice(parkingLotId, reservationStartTime, actualEndTime);
+
+            return usedTimePrice + cancellationFee;
+        }
+    }
+
+    public ReservationDTO extendReservation(String reservationId, OffsetDateTime newEndTime) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new RuntimeException("Reservation not found"));
+
+        if (!canExtendReservation(reservation.getParkingLot().getId(), reservation.getReservationType())) {
+            throw new RuntimeException("Extension not allowed for this reservation");
+        }
+
+        if (reservation.getStatus() != ReservationStatus.PAID &&
+                reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw new RuntimeException("Cannot extend reservation with status: " + reservation.getStatus());
+        }
+
+        Double extensionPrice = calculateExtensionPrice(
+                reservation.getParkingLot().getId(),
+                reservation.getReservationType(),
+                reservation.getEndTime(),
+                newEndTime
+        );
+
+        reservation.setEndTime(newEndTime);
+        reservation.setTotalAmount(reservation.getTotalAmount() + extensionPrice);
+        reservation.setFinalAmount(reservation.getFinalAmount() + extensionPrice);
+        reservation.setUpdatedAt(OffsetDateTime.now());
+
+        return reservationMapper.toDTO(reservationRepository.save(reservation));
+    }
+
+    public ReservationDTO cancelReservation(String reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new RuntimeException("Reservation not found"));
+
+        OffsetDateTime currentTime = OffsetDateTime.now();
+        boolean hasStarted = currentTime.isAfter(reservation.getStartTime());
+
+        if (!canCancelReservation(
+                reservation.getParkingLot().getId(),
+                reservation.getStartTime(),
+                currentTime,
+                hasStarted
+        )) {
+            throw new RuntimeException("Cancellation not allowed for this reservation");
+        }
+
+        if (reservation.getStatus() == ReservationStatus.CANCELLED) {
+            throw new RuntimeException("Reservation is already cancelled");
+        }
+
+        Double totalCancellationAmount = calculateTotalCancellationAmount(
+                reservation.getParkingLot().getId(),
+                reservation.getStartTime(),
+                currentTime,
+                hasStarted,
+                reservation.getTotalAmount()
+        );
+
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        reservation.setTotalAmount(totalCancellationAmount);
+        reservation.setFinalAmount(totalCancellationAmount);
+        reservation.setUpdatedAt(OffsetDateTime.now());
+
+        if (hasStarted) {
+            reservation.setEndTime(currentTime);
+        }
+
+        ParkingLot parkingLot = reservation.getParkingLot();
+        if (parkingLot.getSpotsAvailable() != null) {
+            parkingLot.setSpotsAvailable(parkingLot.getSpotsAvailable() + 1);
+            parkingLotRepository.save(parkingLot);
+        }
+
+        return reservationMapper.toDTO(reservationRepository.save(reservation));
     }
 
     private Double generateRandomPrice(String parkingLotId, OffsetDateTime startTime, OffsetDateTime endTime) {
@@ -438,24 +744,6 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO endActiveReservation(String reservationId, OffsetDateTime endTime, Double totalAmount) {
-        Reservation reservation = reservationRepository.findById(reservationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
-
-        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
-            throw new InvalidDataException("Only active reservations can be ended.");
-        }
-
-        reservation.setEndTime(endTime);
-        reservation.setTotalAmount(totalAmount);
-        reservation.setFinalAmount(totalAmount);
-        reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
-
-        Reservation updatedReservation = reservationRepository.save(reservation);
-        return reservationMapper.toDTO(updatedReservation);
-    }
-
-    @Transactional
     public ReservationDTO activatePayForUsageReservation(String reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
@@ -468,7 +756,6 @@ public class ReservationService {
         }
 
         User user = reservation.getUser();
-        ParkingLot parkingLot = reservation.getParkingLot();
 
         try {
             String stripeCustomerId = stripeService.getOrCreateStripeCustomerId(user, reservation.getGuestEmail());
@@ -480,25 +767,27 @@ public class ReservationService {
             Map<String, String> setupIntentMetadata = Map.of(
                     "reservation_id", reservation.getId(),
                     "user_id", user != null ? user.getId() : "guest-" + reservation.getId(),
-                    "parking_lot_id", parkingLot != null ? parkingLot.getId() : "N/A",
+                    "parking_lot_id", reservation.getParkingLot() != null ? reservation.getParkingLot().getId() : "N/A",
                     "intent_purpose", "pay_for_usage_card_setup"
             );
 
-            // Create a SetupIntent instead of a PaymentIntent for card setup
-            StripeIntentResponse stripeResponse = stripeService.createSetupIntent(stripeCustomerId, setupIntentMetadata);
+            StripeIntentResponse stripeResponse = stripeService.createSetupIntentForCardVerification(stripeCustomerId, setupIntentMetadata);
 
-            reservation.setStripeSetupIntentId(stripeResponse.getIntentId()); // Store SetupIntent ID
-            reservation.setStripePaymentIntentId(null); // Clear any old PaymentIntent ID
-            reservation.setStatus(ReservationStatus.PENDING_PAYMENT); // Remains pending until card is setup via PaymentSheet
+            reservation.setStripeSetupIntentId(stripeResponse.getIntentId());
+            reservation.setStripePaymentIntentId(null);
+            reservation.setStripeClientSecret(stripeResponse.getClientSecret());
+            reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
 
             Reservation updatedReservation = reservationRepository.save(reservation);
-            if (user != null && (user.getStripeCustomerId() == null || !user.getStripeCustomerId().equals(stripeCustomerId) || !Objects.equals(user.getStripeCustomerId(), stripeCustomerId))) {
+            if (user != null) {
                 userRepository.save(user);
             }
 
             ReservationDTO dto = reservationMapper.toDTO(updatedReservation);
             dto.setStripeClientSecret(stripeResponse.getClientSecret());
-            dto.setStripeOperationType("SETUP_INTENT"); // Indicate the type of intent
+            dto.setStripeOperationType("SETUP_INTENT");
+
+            // Webhook will handle activation when SetupIntent succeeds
             return dto;
 
         } catch (StripeException e) {
@@ -528,7 +817,7 @@ public class ReservationService {
             stripeService.attachPaymentMethodToCustomer(stripePaymentMethodIdFromFrontend, reservation.getStripeCustomerId());
             stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), stripePaymentMethodIdFromFrontend);
 
-            reservation.setStripePaymentMethodId(stripePaymentMethodIdFromFrontend);
+            reservation.setSavedPaymentMethodId(stripePaymentMethodIdFromFrontend);
 
             boolean statusChangedToActive = false;
             // If status is PENDING_PAYMENT (meaning client just completed PaymentSheet for SetupIntent,
@@ -655,128 +944,16 @@ public class ReservationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
         if (reservation.getStatus() == ReservationStatus.PAID || reservation.getStatus() == ReservationStatus.ACTIVE) {
-            System.out.println("Reservation " + reservationId + " is already PAID or ACTIVE. Idempotent confirmation.");
+            System.out.println("Reservation " + reservationId + " is already processed. Returning current state.");
             return reservationMapper.toDTO(reservation);
         }
-        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
-            throw new InvalidDataException("Reservation " + reservationId + " is not in PENDING_PAYMENT state for confirmation. Current status: " + reservation.getStatus());
+
+        if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
+            System.out.println("Reservation " + reservationId + " is pending - webhooks will handle processing.");
+            return reservationMapper.toDTO(reservation);
         }
 
-        User user = reservation.getUser();
-        ParkingLot parkingLot = reservation.getParkingLot();
-
-        try {
-            // Check if this confirmation is for a SetupIntent (PFU Activation)
-            if (reservation.getStripeSetupIntentId() != null) {
-                SetupIntent setupIntent = stripeService.retrieveSetupIntent(reservation.getStripeSetupIntentId());
-
-                if ("succeeded".equals(setupIntent.getStatus())) {
-                    String paymentMethodId = setupIntent.getPaymentMethod();
-                    if (paymentMethodId == null) {
-                        throw new PaymentProcessingException("SetupIntent succeeded but no PaymentMethod ID found.");
-                    }
-                    reservation.setStripePaymentMethodId(paymentMethodId);
-                    reservation.setStatus(ReservationStatus.ACTIVE); // PFU is now active with a saved card
-
-                    if (user != null && reservation.getStripeCustomerId() != null) {
-                        try {
-                            stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodId);
-                        } catch (StripeException e) {
-                            System.err.println("Failed to set default payment method for customer " + reservation.getStripeCustomerId() + " after SetupIntent: " + e.getMessage());
-                        }
-                    }
-                    System.out.println("Pay For Usage card setup successful via SetupIntent for reservation " + reservationId + ". Status set to ACTIVE.");
-
-                    String recipientEmailPfu = (user != null && user.getEmail() != null) ? user.getEmail() : reservation.getGuestEmail();
-                    String guestTokenPfu = null;
-                    if (user == null && parkingLot != null) {
-                        guestTokenPfu = generateOrUpdateGuestToken(reservation, null).getToken();
-                    }
-                    if (recipientEmailPfu != null && !recipientEmailPfu.isEmpty() && parkingLot != null) {
-                        emailService.sendPayForUsageActiveEmail(recipientEmailPfu, reservation.getId(), parkingLot.getName(), reservation.getStartTime(), guestTokenPfu);
-                    }
-                } else {
-                    System.err.println("Stripe SetupIntent " + setupIntent.getId() + " for reservation " + reservationId +
-                            " is not 'succeeded'. Actual status: " + setupIntent.getStatus() + ". Setting reservation status to PAYMENT_FAILED.");
-                    reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation);
-                    throw new PaymentProcessingException("Stripe card setup verification failed. Status: " + setupIntent.getStatus());
-                }
-            }
-            else if (reservation.getStripePaymentIntentId() != null) {
-                PaymentIntent paymentIntent = stripeService.retrievePaymentIntent(reservation.getStripePaymentIntentId());
-
-                if ("succeeded".equals(paymentIntent.getStatus())) {
-                    reservation.setStatus(ReservationStatus.PAID);
-
-                    Double pointsUsed = reservation.getPointsUsed() != null ? reservation.getPointsUsed() : 0.0;
-                    Double finalAmountPaid = reservation.getFinalAmount() != null ? reservation.getFinalAmount() : 0.0;
-
-                    // Update user loyalty points
-                    if (user != null && pointsUsed > 0) {
-                        Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-                        user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsUsed));
-                    }
-                    if (user != null && finalAmountPaid > 0) {
-                        double pointsToAddUnrounded = finalAmountPaid * 0.05;
-                        BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded).setScale(2, RoundingMode.HALF_UP);
-                        Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
-                        Double currentLoyaltyPointsAfterDeduction = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-                        user.setLoyaltyPoints(currentLoyaltyPointsAfterDeduction + pointsToAdd);
-                    }
-
-                    // REMOVED: Owner earnings logic - now handled by webhook service
-
-                    // Handle payment method saving for future use
-                    String paymentMethodIdFromPI = paymentIntent.getPaymentMethod();
-                    if (paymentMethodIdFromPI != null && paymentIntent.getSetupFutureUsage() != null && !paymentIntent.getSetupFutureUsage().isEmpty()) {
-                        if (user != null && reservation.getStripeCustomerId() != null) {
-                            try {
-                                stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodIdFromPI);
-                                if(reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getStripePaymentMethodId() == null){
-                                    reservation.setStripePaymentMethodId(paymentMethodIdFromPI);
-                                }
-                            } catch (StripeException e) {
-                                System.err.println("Failed to set default payment method for customer " + reservation.getStripeCustomerId() + " after PaymentIntent with setup_future_usage: " + e.getMessage());
-                            }
-                        }
-                    }
-
-                    // Send confirmation email
-                    String recipientEmailPaid = (user != null && user.getEmail() != null) ? user.getEmail() : reservation.getGuestEmail();
-                    String guestTokenPaid = null;
-                    if (user == null && parkingLot != null) {
-                        OffsetDateTime tokenExpiry = reservation.getEndTime() != null ? reservation.getEndTime().plusHours(1) : OffsetDateTime.now(ZoneOffset.UTC).plusHours(24);
-                        guestTokenPaid = generateOrUpdateGuestToken(reservation, tokenExpiry).getToken();
-                    }
-                    if (recipientEmailPaid != null && !recipientEmailPaid.isEmpty() && parkingLot != null) {
-                        emailService.sendReservationConfirmationEmail(recipientEmailPaid, reservation.getId(), parkingLot.getName(), reservation.getStartTime(), reservation.getEndTime(), finalAmountPaid, guestTokenPaid);
-                    }
-                } else {
-                    System.err.println("Stripe PaymentIntent " + paymentIntent.getId() + " for reservation " + reservationId +
-                            " is not 'succeeded'. Actual status: " + paymentIntent.getStatus() + ". Setting reservation status to PAYMENT_FAILED.");
-                    reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation);
-                    throw new PaymentProcessingException("Stripe payment verification failed. Status: " + paymentIntent.getStatus());
-                }
-            } else {
-                throw new InvalidDataException("Reservation " + reservationId + " does not have a Stripe Intent ID (Payment or Setup) for verification.");
-            }
-
-            if (user != null) {
-                userRepository.save(user);
-            }
-            Reservation updatedReservation = reservationRepository.save(reservation);
-            return reservationMapper.toDTO(updatedReservation);
-
-        } catch (StripeException e) {
-            System.err.println("Stripe API error during payment confirmation for reservation " + reservationId + ": " + e.getMessage() + ". Setting reservation status to PAYMENT_FAILED.");
-            if (reservation.getStatus() != ReservationStatus.PAID && reservation.getStatus() != ReservationStatus.ACTIVE) {
-                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                reservationRepository.save(reservation);
-            }
-            throw new PaymentProcessingException("Failed to confirm payment/setup with Stripe: " + e.getMessage());
-        }
+        throw new InvalidDataException("Reservation " + reservationId + " is in unexpected state: " + reservation.getStatus());
     }
 
     @Transactional
@@ -791,75 +968,50 @@ public class ReservationService {
             throw new InvalidDataException("Only active PAY_FOR_USAGE reservations can be ended. Current status: " + reservation.getStatus());
         }
 
-        User user = reservation.getUser();
-        ParkingLot parkingLot = reservation.getParkingLot();
-        reservation.setEndTime(endTime);
-        reservation.setTotalAmount(totalAmount); // This is the gross amount for the session
-
-        // CRITICAL: For PFU, the payment method should have been saved during activation (SetupIntent flow)
-        if (reservation.getStripePaymentMethodId() == null || reservation.getStripeCustomerId() == null) {
-            reservation.setFinalAmount(totalAmount); // What they owe
-            reservation.setStatus(ReservationStatus.PAYMENT_FAILED); // Cannot charge automatically
-            reservationRepository.save(reservation);
-            throw new PaymentProcessingException("Payment method not saved for this Pay For Usage session. Cannot process automatic payment.");
+        if (reservation.getSavedPaymentMethodId() == null) {
+            throw new IllegalStateException("No saved payment method found for this reservation");
         }
 
-        // If total amount is zero or less (e.g. promotions, or error), complete without charging.
+        reservation.setEndTime(endTime);
+        reservation.setTotalAmount(totalAmount);
+
         if (totalAmount <= 0) {
-            // Using a helper or inline logic to set to PAID, adjust points, send email etc.
-            // For PFU, points are typically not used for the session charge itself, but for simplicity here:
-            return completeZeroOrNegativePfuPayment(reservation, user, parkingLot, totalAmount);
+            return completeZeroOrNegativePfuPayment(reservation, reservation.getUser(), reservation.getParkingLot(), totalAmount);
         }
 
         try {
             long amountToChargeInSmallestUnit = Math.round(totalAmount * 100);
-            Map<String, String> paymentIntentMetadata = createPaymentMetadata(reservation, user, parkingLot);
+            Map<String, String> paymentIntentMetadata = createPaymentMetadata(reservation, reservation.getUser(), reservation.getParkingLot());
 
-            // Create a PaymentIntent to charge the saved card
-            // IMPORTANT: use reservation.getStripePaymentMethodId() and reservation.getStripeCustomerId()
-            // Set offSession to true as this is a merchant-initiated transaction (MIT)
-            StripeIntentResponse stripeResponse = stripeService.createPaymentIntent(
+            StripeIntentResponse stripeResponse = stripeService.createPaymentIntentWithSavedPaymentMethod(
                     amountToChargeInSmallestUnit,
                     "RON",
                     reservation.getStripeCustomerId(),
-                    reservation.getStripePaymentMethodId(), // Use the saved payment method
-                    paymentIntentMetadata,
-                    true // offSession = true
+                    reservation.getSavedPaymentMethodId(),
+                    paymentIntentMetadata
             );
 
-            reservation.setStripePaymentIntentId(stripeResponse.getIntentId()); // Store PI ID for this charge attempt
-            reservation.setFinalAmount(totalAmount); // What we attempted to charge
-            reservation.setPointsUsed(0.0); // PFU typically doesn't use points for session charge this way
-
-            // Status becomes PENDING_PAYMENT while Stripe processes the off-session charge.
-            // A webhook (payment_intent.succeeded/failed) should ideally update to PAID/PAYMENT_FAILED.
-            // If relying on polling, client calls confirmClientStripePaymentSuccess.
+            reservation.setStripePaymentIntentId(stripeResponse.getIntentId());
+            reservation.setFinalAmount(totalAmount);
+            reservation.setPointsUsed(0.0);
             reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
 
             Reservation updatedReservation = reservationRepository.save(reservation);
             ReservationDTO dto = reservationMapper.toDTO(updatedReservation);
 
-            // If immediate success (rare for off-session without SCA challenge, but possible)
-            if ("succeeded".equals(stripeResponse.getStatus())) {
-                // This would ideally be handled by confirmClientStripePaymentSuccess or webhook
-                // but for direct response:
-                dto = confirmClientStripePaymentSuccess(reservationId); // Re-confirm to finalize points/email
-            }
-            // If SCA is required for the off-session payment
-            else if ("requires_action".equals(stripeResponse.getStatus()) || "requires_confirmation".equals(stripeResponse.getStatus())) {
+            // Let webhooks handle success/failure - just return the current state with client secret if needed
+            if ("requires_action".equals(stripeResponse.getStatus()) || "requires_confirmation".equals(stripeResponse.getStatus())) {
                 dto.setStripeClientSecret(stripeResponse.getClientSecret());
                 dto.setStripeOperationType("PAYMENT_INTENT_REQUIRES_ACTION");
-            } else if ("processing".equals(stripeResponse.getStatus())){
+            } else if ("processing".equals(stripeResponse.getStatus())) {
                 dto.setStripeOperationType("PAYMENT_INTENT_PROCESSING");
+            } else if ("requires_payment_method".equals(stripeResponse.getStatus())) {
+                // Webhook will handle setting to PAYMENT_FAILED
+                dto.setStripeOperationType("PAYMENT_INTENT_REQUIRES_NEW_PAYMENT_METHOD");
+            } else {
+                // "succeeded" or other statuses - webhook will handle the rest
+                dto.setStripeOperationType("PAYMENT_INTENT_" + stripeResponse.getStatus().toUpperCase());
             }
-            // Other statuses like 'requires_payment_method' would indicate an issue with the saved card.
-            else if ("requires_payment_method".equals(stripeResponse.getStatus())){
-                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                reservationRepository.save(reservation);
-                dto = reservationMapper.toDTO(reservation);
-                // Inform user their saved card failed.
-            }
-
 
             return dto;
         } catch (StripeException e) {
@@ -920,190 +1072,190 @@ public class ReservationService {
         }
     }
 
-    @Transactional
-    public ReservationDTO handlePayment(String reservationId, PaymentRequestDTO paymentRequest) {
-        Reservation reservation = reservationRepository.findById(reservationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
-
-        ParkingLot parkingLot = reservation.getParkingLot();
-        if (parkingLot == null) {
-            throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
-        }
-
-        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT && reservation.getStatus() != ReservationStatus.PAYMENT_FAILED) {
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status for payment. Current status: " + reservation.getStatus());
-        }
-
-        User user = reservation.getUser();
-        String recipientEmail = (user != null && user.getEmail() != null) ?
-                user.getEmail() : reservation.getGuestEmail();
-        String guestAccessTokenString = null;
-
-        Double pointsToUse = (paymentRequest != null && paymentRequest.getPointsToUse() != null) ? paymentRequest.getPointsToUse() : 0.0;
-        if (user != null && pointsToUse > 0) {
-            Double userCurrentPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-            if (userCurrentPoints < pointsToUse) {
-                throw new InvalidDataException("Insufficient loyalty points. Available: " + userCurrentPoints + ", Requested: " + pointsToUse);
-            }
-        }
-
-        if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
-            // ... (Pay for usage activation logic - remains the same)
-            reservation.setStatus(ReservationStatus.ACTIVE);
-
-            if (user == null) {
-                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null);
-                guestAccessTokenString = guestToken.getToken();
-            }
-
-            Reservation updatedReservation = reservationRepository.save(reservation);
-
-            if (recipientEmail != null && !recipientEmail.isEmpty()) {
-                emailService.sendPayForUsageActiveEmail(
-                        recipientEmail,
-                        updatedReservation.getId(),
-                        parkingLot.getName(),
-                        updatedReservation.getStartTime(),
-                        guestAccessTokenString
-                );
-            }
-            return reservationMapper.toDTO(updatedReservation);
-
-        } else if (reservation.getReservationType() != ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
-            // ... (Invalid state logic - remains the same)
-            throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
-                    reservation.getReservationType() + " must have an end time for final payment processing.");
-        } else {
-            User owner = parkingLot.getOwner();
-            Double totalAmountForReservation = reservation.getTotalAmount();
-            Double finalAmountCustomerPays = totalAmountForReservation; // Amount customer effectively pays after points
-
-            if (totalAmountForReservation == null || totalAmountForReservation < 0) {
-                throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid total amount for payment processing.");
-            }
-
-            if (user != null && pointsToUse > 0) {
-                finalAmountCustomerPays = totalAmountForReservation - (pointsToUse * 0.1);
-                if (finalAmountCustomerPays < 0) {
-                    finalAmountCustomerPays = 0.0;
-                }
-            }
-            finalAmountCustomerPays = BigDecimal.valueOf(finalAmountCustomerPays).setScale(2, RoundingMode.HALF_UP).doubleValue();
-
-            Double netAmountForOwner = 0.0;
-
-            if (finalAmountCustomerPays > 0) {
-                try {
-                    long amountToChargeInSmallestUnit = Math.round(finalAmountCustomerPays * 100);
-                    String chargeDescription = "Payment for Reservation ID: " + reservation.getId() +
-                            " by user: " + (user != null ? user.getUsername() : "Guest") +
-                            " for parking lot: " + parkingLot.getName();
-
-                    System.out.println("Attempting Stripe charge for reservation " + reservationId + " with amount " + finalAmountCustomerPays + " RON (" + amountToChargeInSmallestUnit + " smallest unit)");
-
-                    // Call StripeService to create the charge
-                    Charge stripeCharge = stripeService.createPlatformCharge(amountToChargeInSmallestUnit, chargeDescription);
-
-                    if (!"succeeded".equalsIgnoreCase(stripeCharge.getStatus())) {
-                        String failureMessage = "Stripe charge attempt was not successful. Status: " + stripeCharge.getStatus();
-                        System.err.println(failureMessage + " for Charge ID: " + stripeCharge.getId());
-                        reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                        reservationRepository.save(reservation);
-                        throw new PaymentProcessingException(failureMessage);
-                    }
-                    System.out.println("Stripe charge successful for reservation " + reservationId + ". Charge ID: " + stripeCharge.getId());
-
-                    // Retrieve the BalanceTransaction to get the net amount
-                    if (stripeCharge.getBalanceTransaction() != null) {
-                        BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(stripeCharge.getBalanceTransaction());
-                        netAmountForOwner = BigDecimal.valueOf(balanceTransaction.getNet())
-                                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                                .doubleValue(); // Convert from smallest unit (e.g., bani) to RON
-                        System.out.println("Net amount from Stripe (after fees) for Charge ID " + stripeCharge.getId() + ": " + netAmountForOwner + " RON");
-                    } else {
-                        // Fallback or error if balance transaction ID is not available, though it should be for successful charges.
-                        // For simplicity, we might assume finalAmountCustomerPays is close enough if BT is missing,
-                        // but ideally, this scenario should be handled robustly.
-                        System.err.println("Warning: BalanceTransaction ID not found on successful charge " + stripeCharge.getId() + ". Using customer paid amount for owner earnings, which may not account for Stripe fees.");
-                        netAmountForOwner = finalAmountCustomerPays;
-                    }
-
-                } catch (StripeException e) {
-                    String stripeErrorMessage = (e.getStripeError() != null && e.getStripeError().getMessage() != null) ?
-                            e.getStripeError().getMessage() : e.getMessage();
-                    if (stripeErrorMessage == null) stripeErrorMessage = "An unknown Stripe error occurred during payment processing.";
-                    System.err.println("StripeException during payment for reservation " + reservationId + ": " + stripeErrorMessage);
-                    reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                    reservationRepository.save(reservation);
-                    throw new PaymentProcessingException(stripeErrorMessage);
-                }
-            } else {
-                System.out.println("Final amount customer pays is 0 or less for reservation " + reservationId + ". Skipping Stripe charge. Net amount for owner is 0.");
-                netAmountForOwner = 0.0;
-            }
-
-            reservation.setStatus(ReservationStatus.PAID);
-
-            if (user != null && pointsToUse > 0) {
-                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-                user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsToUse));
-            }
-            reservation.setPointsUsed(pointsToUse);
-            reservation.setFinalAmount(finalAmountCustomerPays);
-
-            System.out.println("Reservation ID: " + reservationId + " - Checking owner earnings update.");
-            System.out.println("Owner: " + (owner != null ? owner.getUsername() : "null"));
-            System.out.println("Final Amount Customer Pays: " + finalAmountCustomerPays);
-            System.out.println("Net Amount For Owner (calculated): " + netAmountForOwner);
-
-            if (owner != null && netAmountForOwner > 0) {
-                Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
-                Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
-
-                owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
-                owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
-                System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
-                System.out.println("Updating pending earnings for owner: " + owner.getUsername() + " by " + netAmountForOwner);
-            } else {
-                System.out.println("Skipping pending earnings update for reservation " + reservationId + ". Owner is null or netAmountForOwner is not positive.");
-            }
-
-            if (user != null && finalAmountCustomerPays > 0) {
-                double pointsToAddUnrounded = finalAmountCustomerPays * 0.05;
-                BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
-                        .setScale(2, RoundingMode.HALF_UP);
-                Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
-                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
-                user.setLoyaltyPoints(currentLoyaltyPoints + pointsToAdd);
-            }
-
-            if (user != null) userRepository.save(user);
-            if (owner != null && (user == null || !owner.getId().equals(user.getId()))) {
-                userRepository.save(owner);
-            }
-
-            Reservation updatedReservation = reservationRepository.save(reservation);
-
-            if (user == null) {
-                OffsetDateTime tokenExpiry = updatedReservation.getEndTime() != null ? updatedReservation.getEndTime().plusHours(1) : OffsetDateTime.now().plusHours(24);
-                GuestAccessToken guestToken = generateOrUpdateGuestToken(updatedReservation, tokenExpiry);
-                guestAccessTokenString = guestToken.getToken();
-            }
-
-            if (recipientEmail != null && !recipientEmail.isEmpty()) {
-                emailService.sendReservationConfirmationEmail(
-                        recipientEmail,
-                        updatedReservation.getId(),
-                        parkingLot.getName(),
-                        updatedReservation.getStartTime(),
-                        updatedReservation.getEndTime(),
-                        finalAmountCustomerPays,
-                        guestAccessTokenString
-                );
-            }
-            return reservationMapper.toDTO(updatedReservation);
-        }
-    }
+//    @Transactional
+//    public ReservationDTO handlePayment(String reservationId, PaymentRequestDTO paymentRequest) {
+//        Reservation reservation = reservationRepository.findById(reservationId)
+//                .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
+//
+//        ParkingLot parkingLot = reservation.getParkingLot();
+//        if (parkingLot == null) {
+//            throw new InvalidDataException("Critical error: Reservation (ID: " + reservationId + ") is not associated with a parking lot.");
+//        }
+//
+//        if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT && reservation.getStatus() != ReservationStatus.PAYMENT_FAILED) {
+//            throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid status for payment. Current status: " + reservation.getStatus());
+//        }
+//
+//        User user = reservation.getUser();
+//        String recipientEmail = (user != null && user.getEmail() != null) ?
+//                user.getEmail() : reservation.getGuestEmail();
+//        String guestAccessTokenString = null;
+//
+//        Double pointsToUse = (paymentRequest != null && paymentRequest.getPointsToUse() != null) ? paymentRequest.getPointsToUse() : 0.0;
+//        if (user != null && pointsToUse > 0) {
+//            Double userCurrentPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+//            if (userCurrentPoints < pointsToUse) {
+//                throw new InvalidDataException("Insufficient loyalty points. Available: " + userCurrentPoints + ", Requested: " + pointsToUse);
+//            }
+//        }
+//
+//        if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+//            // ... (Pay for usage activation logic - remains the same)
+//            reservation.setStatus(ReservationStatus.ACTIVE);
+//
+//            if (user == null) {
+//                GuestAccessToken guestToken = generateOrUpdateGuestToken(reservation, null);
+//                guestAccessTokenString = guestToken.getToken();
+//            }
+//
+//            Reservation updatedReservation = reservationRepository.save(reservation);
+//
+//            if (recipientEmail != null && !recipientEmail.isEmpty()) {
+//                emailService.sendPayForUsageActiveEmail(
+//                        recipientEmail,
+//                        updatedReservation.getId(),
+//                        parkingLot.getName(),
+//                        updatedReservation.getStartTime(),
+//                        guestAccessTokenString
+//                );
+//            }
+//            return reservationMapper.toDTO(updatedReservation);
+//
+//        } else if (reservation.getReservationType() != ReservationType.PAY_FOR_USAGE && reservation.getEndTime() == null) {
+//            // ... (Invalid state logic - remains the same)
+//            throw new InvalidDataException("Reservation (ID: " + reservationId + ") of type " +
+//                    reservation.getReservationType() + " must have an end time for final payment processing.");
+//        } else {
+//            User owner = parkingLot.getOwner();
+//            Double totalAmountForReservation = reservation.getTotalAmount();
+//            Double finalAmountCustomerPays = totalAmountForReservation; // Amount customer effectively pays after points
+//
+//            if (totalAmountForReservation == null || totalAmountForReservation < 0) {
+//                throw new InvalidDataException("Reservation (ID: " + reservationId + ") does not have a valid total amount for payment processing.");
+//            }
+//
+//            if (user != null && pointsToUse > 0) {
+//                finalAmountCustomerPays = totalAmountForReservation - (pointsToUse * 0.1);
+//                if (finalAmountCustomerPays < 0) {
+//                    finalAmountCustomerPays = 0.0;
+//                }
+//            }
+//            finalAmountCustomerPays = BigDecimal.valueOf(finalAmountCustomerPays).setScale(2, RoundingMode.HALF_UP).doubleValue();
+//
+//            Double netAmountForOwner = 0.0;
+//
+//            if (finalAmountCustomerPays > 0) {
+//                try {
+//                    long amountToChargeInSmallestUnit = Math.round(finalAmountCustomerPays * 100);
+//                    String chargeDescription = "Payment for Reservation ID: " + reservation.getId() +
+//                            " by user: " + (user != null ? user.getUsername() : "Guest") +
+//                            " for parking lot: " + parkingLot.getName();
+//
+//                    System.out.println("Attempting Stripe charge for reservation " + reservationId + " with amount " + finalAmountCustomerPays + " RON (" + amountToChargeInSmallestUnit + " smallest unit)");
+//
+//                    // Call StripeService to create the charge
+//                    Charge stripeCharge = stripeService.createPlatformCharge(amountToChargeInSmallestUnit, chargeDescription);
+//
+//                    if (!"succeeded".equalsIgnoreCase(stripeCharge.getStatus())) {
+//                        String failureMessage = "Stripe charge attempt was not successful. Status: " + stripeCharge.getStatus();
+//                        System.err.println(failureMessage + " for Charge ID: " + stripeCharge.getId());
+//                        reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+//                        reservationRepository.save(reservation);
+//                        throw new PaymentProcessingException(failureMessage);
+//                    }
+//                    System.out.println("Stripe charge successful for reservation " + reservationId + ". Charge ID: " + stripeCharge.getId());
+//
+//                    // Retrieve the BalanceTransaction to get the net amount
+//                    if (stripeCharge.getBalanceTransaction() != null) {
+//                        BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(stripeCharge.getBalanceTransaction());
+//                        netAmountForOwner = BigDecimal.valueOf(balanceTransaction.getNet())
+//                                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+//                                .doubleValue(); // Convert from smallest unit (e.g., bani) to RON
+//                        System.out.println("Net amount from Stripe (after fees) for Charge ID " + stripeCharge.getId() + ": " + netAmountForOwner + " RON");
+//                    } else {
+//                        // Fallback or error if balance transaction ID is not available, though it should be for successful charges.
+//                        // For simplicity, we might assume finalAmountCustomerPays is close enough if BT is missing,
+//                        // but ideally, this scenario should be handled robustly.
+//                        System.err.println("Warning: BalanceTransaction ID not found on successful charge " + stripeCharge.getId() + ". Using customer paid amount for owner earnings, which may not account for Stripe fees.");
+//                        netAmountForOwner = finalAmountCustomerPays;
+//                    }
+//
+//                } catch (StripeException e) {
+//                    String stripeErrorMessage = (e.getStripeError() != null && e.getStripeError().getMessage() != null) ?
+//                            e.getStripeError().getMessage() : e.getMessage();
+//                    if (stripeErrorMessage == null) stripeErrorMessage = "An unknown Stripe error occurred during payment processing.";
+//                    System.err.println("StripeException during payment for reservation " + reservationId + ": " + stripeErrorMessage);
+//                    reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+//                    reservationRepository.save(reservation);
+//                    throw new PaymentProcessingException(stripeErrorMessage);
+//                }
+//            } else {
+//                System.out.println("Final amount customer pays is 0 or less for reservation " + reservationId + ". Skipping Stripe charge. Net amount for owner is 0.");
+//                netAmountForOwner = 0.0;
+//            }
+//
+//            reservation.setStatus(ReservationStatus.PAID);
+//
+//            if (user != null && pointsToUse > 0) {
+//                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+//                user.setLoyaltyPoints(Math.max(0, currentLoyaltyPoints - pointsToUse));
+//            }
+//            reservation.setPointsUsed(pointsToUse);
+//            reservation.setFinalAmount(finalAmountCustomerPays);
+//
+//            System.out.println("Reservation ID: " + reservationId + " - Checking owner earnings update.");
+//            System.out.println("Owner: " + (owner != null ? owner.getUsername() : "null"));
+//            System.out.println("Final Amount Customer Pays: " + finalAmountCustomerPays);
+//            System.out.println("Net Amount For Owner (calculated): " + netAmountForOwner);
+//
+//            if (owner != null && netAmountForOwner > 0) {
+//                Double currentPendingEarnings = Optional.ofNullable(owner.getPendingEarnings()).orElse(0.0);
+//                Double currentTotalEarnings = Optional.ofNullable(owner.getTotalEarnings()).orElse(0.0);
+//
+//                owner.setPendingEarnings(BigDecimal.valueOf(currentPendingEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
+//                owner.setTotalEarnings(BigDecimal.valueOf(currentTotalEarnings).add(BigDecimal.valueOf(netAmountForOwner)).setScale(2, RoundingMode.HALF_UP).doubleValue());
+//                System.out.println("Updated owner " + owner.getUsername() + " pending earnings with net amount: " + netAmountForOwner);
+//                System.out.println("Updating pending earnings for owner: " + owner.getUsername() + " by " + netAmountForOwner);
+//            } else {
+//                System.out.println("Skipping pending earnings update for reservation " + reservationId + ". Owner is null or netAmountForOwner is not positive.");
+//            }
+//
+//            if (user != null && finalAmountCustomerPays > 0) {
+//                double pointsToAddUnrounded = finalAmountCustomerPays * 0.05;
+//                BigDecimal pointsToAddBigDecimal = BigDecimal.valueOf(pointsToAddUnrounded)
+//                        .setScale(2, RoundingMode.HALF_UP);
+//                Double pointsToAdd = pointsToAddBigDecimal.doubleValue();
+//                Double currentLoyaltyPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
+//                user.setLoyaltyPoints(currentLoyaltyPoints + pointsToAdd);
+//            }
+//
+//            if (user != null) userRepository.save(user);
+//            if (owner != null && (user == null || !owner.getId().equals(user.getId()))) {
+//                userRepository.save(owner);
+//            }
+//
+//            Reservation updatedReservation = reservationRepository.save(reservation);
+//
+//            if (user == null) {
+//                OffsetDateTime tokenExpiry = updatedReservation.getEndTime() != null ? updatedReservation.getEndTime().plusHours(1) : OffsetDateTime.now().plusHours(24);
+//                GuestAccessToken guestToken = generateOrUpdateGuestToken(updatedReservation, tokenExpiry);
+//                guestAccessTokenString = guestToken.getToken();
+//            }
+//
+//            if (recipientEmail != null && !recipientEmail.isEmpty()) {
+//                emailService.sendReservationConfirmationEmail(
+//                        recipientEmail,
+//                        updatedReservation.getId(),
+//                        parkingLot.getName(),
+//                        updatedReservation.getStartTime(),
+//                        updatedReservation.getEndTime(),
+//                        finalAmountCustomerPays,
+//                        guestAccessTokenString
+//                );
+//            }
+//            return reservationMapper.toDTO(updatedReservation);
+//        }
+//    }
 
     @Transactional(readOnly = true)
     public ReservationDTO getReservationByIdForGuest(String reservationId, String token) {

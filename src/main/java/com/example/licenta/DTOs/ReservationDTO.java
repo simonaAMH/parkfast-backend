@@ -33,7 +33,7 @@ public class ReservationDTO {
     private String stripeClientSecret;
     private String stripeOperationType; // e.g., "SETUP_INTENT", "PAYMENT_INTENT", "PAYMENT_INTENT_REQUIRES_ACTION"
     private String stripeCustomerId;
-    private String stripePaymentMethodId;
+    private String savedPaymentMethodId;
     private String stripeSetupIntentId;
     private String stripePaymentIntentId;
 

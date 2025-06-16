@@ -4,6 +4,7 @@ import com.example.licenta.DTOs.*;
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
 import com.example.licenta.JwtComponents.JwtAuthenticationFilter;
+import com.example.licenta.Models.Reservation;
 import com.example.licenta.Services.ReservationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -216,49 +217,6 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/{id}/end")
-    public ResponseEntity<ApiResponse<ReservationDTO>> endActiveReservation(
-            @PathVariable String id,
-            @RequestBody Map<String, Object> requestBody) {
-
-        String endTimeStr = (String) requestBody.get("endTime");
-        Double totalAmount = Double.parseDouble(requestBody.get("totalAmount").toString());
-
-        OffsetDateTime endTime;
-        try {
-            endTime = OffsetDateTime.parse(endTimeStr);
-        } catch (DateTimeParseException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ApiResponse<>(false, HttpStatus.BAD_REQUEST.value(),
-                            "Invalid date format for endTime", null));
-        }
-
-        ReservationDTO updatedReservation = reservationService.endActiveReservation(id, endTime, totalAmount);
-
-        ApiResponse<ReservationDTO> response = new ApiResponse<>(
-                true,
-                HttpStatus.OK.value(),
-                "Reservation ended successfully",
-                updatedReservation
-        );
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/{id}/payment")
-    public ResponseEntity<ApiResponse<ReservationDTO>> handlePayment(
-            @PathVariable String id,
-            @Valid @RequestBody PaymentRequestDTO paymentRequest) {
-
-        ReservationDTO updatedReservation = reservationService.handlePayment(id, paymentRequest);
-        ApiResponse<ReservationDTO> response = new ApiResponse<>(
-                true,
-                HttpStatus.OK.value(),
-                "Payment processed successfully and reservation updated.",
-                updatedReservation
-        );
-        return ResponseEntity.ok(response);
-    }
-
     @PostMapping("/{reservationId}/reviews")
     public ResponseEntity<ApiResponse<ReviewDTO>> createReviewForReservation(
             @PathVariable String reservationId,
@@ -357,4 +315,29 @@ public class ReservationController {
         ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage session ended. Payment initiated.", reservationDTO);
         return ResponseEntity.ok(response);
     }
+
+    @PutMapping("/{reservationId}/extend")
+    public ResponseEntity<ApiResponse<ReservationDTO>> extendReservation(
+            @PathVariable String reservationId,
+            @RequestBody @Valid ExtendReservationRequest request) {
+
+        ReservationDTO extendedReservation = reservationService.extendReservation(reservationId, request.getNewEndTime());
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Extention initiated.", extendedReservation);
+        return ResponseEntity.ok(response);
+    }
+
+    public static class ExtendReservationRequest {
+        @NotNull
+        @Getter
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        private OffsetDateTime newEndTime;
+    }
+
+    @PutMapping("/{reservationId}/cancel")
+    public ResponseEntity<ApiResponse<ReservationDTO>>cancelReservation(@PathVariable String reservationId) {
+        ReservationDTO cancelledReservation = reservationService.cancelReservation(reservationId);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Cancellation initiated.", cancelledReservation);
+        return ResponseEntity.ok(response);
+    }
+
 }

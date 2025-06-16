@@ -44,8 +44,9 @@ public class ReservationMapper {
 
         dto.setStripeSetupIntentId(reservation.getStripeSetupIntentId());
         dto.setStripePaymentIntentId(reservation.getStripePaymentIntentId());
-        dto.setStripePaymentMethodId(reservation.getStripePaymentMethodId());
+        dto.setSavedPaymentMethodId(reservation.getSavedPaymentMethodId());
         dto.setStripeCustomerId(reservation.getStripeCustomerId());
+        dto.setStripeClientSecret(reservation.getStripeClientSecret());
 
         return dto;
     }

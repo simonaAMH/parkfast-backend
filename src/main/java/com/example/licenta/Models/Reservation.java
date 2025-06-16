@@ -90,11 +90,14 @@ public class Reservation {
     @OneToOne(mappedBy = "reservation", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Review review;
 
+    @Column(name = "stripe_client_secret")
+    private String stripeClientSecret;
+
+    @Column(name = "saved_payment_method_id")
+    private String savedPaymentMethodId;
+
     @Column(name = "stripe_customer_id")
     private String stripeCustomerId;
-
-    @Column(name = "stripe_payment_method_id")
-    private String stripePaymentMethodId;
 
     @Column(name = "stripe_setup_intent_id")
     private String stripeSetupIntentId;
