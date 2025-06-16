@@ -72,6 +72,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers(
                                 "/.well-known/**",
                                 "/api/users/register",
@@ -118,8 +119,7 @@ public class SecurityConfig {
                                 "/v3/api-docs.yaml",
                                 "/api-docs/**",
                                 "/swagger-resources/**",
-                                "/webjars/**",
-                                "/api/webhooks/**"
+                                "/webjars/**"
                         ).permitAll()
 
                         .anyRequest().authenticated());
