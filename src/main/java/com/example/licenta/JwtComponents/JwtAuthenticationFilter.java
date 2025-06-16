@@ -41,7 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 path.equals("/api/users/reset-password") ||
                 path.equals("/api/users/refresh-token") ||
                 path.equals("/api/users/delete-account") ||
-                path.equals("/api/webhooks/stripe") ||
+                path.equals("/api/webhooks/stripe/") ||
         path.equals("/api/users/resend-verification")) {
             logger.debug("Skipping JWT filter for public user endpoint: {}", path);
             return true;

@@ -119,7 +119,8 @@ public class SecurityConfig {
                                 "/api-docs/**",
                                 "/swagger-resources/**",
                                 "/webjars/**",
-                                "/api/webhooks/stripe"
+                                "/api/webhooks/stripe",
+                                "/api/webhooks/stripe/**"
                         ).permitAll()
 
                         .anyRequest().authenticated());

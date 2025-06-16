@@ -944,12 +944,24 @@ public class ReservationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
         if (reservation.getStatus() == ReservationStatus.PAID || reservation.getStatus() == ReservationStatus.ACTIVE) {
-            System.out.println("Reservation " + reservationId + " is already processed. Returning current state.");
             return reservationMapper.toDTO(reservation);
         }
 
         if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
-            System.out.println("Reservation " + reservationId + " is pending - webhooks will handle processing.");
+            // Poll for a short time
+            for (int i = 0; i < 10; i++) {
+                try {
+                    Thread.sleep(500); // Wait 500ms
+                    reservation = reservationRepository.findById(reservationId).orElse(reservation);
+                    if (reservation.getStatus() == ReservationStatus.PAID || reservation.getStatus() == ReservationStatus.ACTIVE) {
+                        return reservationMapper.toDTO(reservation);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+
             return reservationMapper.toDTO(reservation);
         }
 
