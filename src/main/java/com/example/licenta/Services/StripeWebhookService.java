@@ -2,9 +2,11 @@ package com.example.licenta.Services;
 
 import com.example.licenta.Enum.Reservation.ReservationStatus;
 import com.example.licenta.Enum.Reservation.ReservationType;
+import com.example.licenta.Models.GuestAccessToken;
 import com.example.licenta.Models.ParkingLot;
 import com.example.licenta.Models.Reservation;
 import com.example.licenta.Models.User;
+import com.example.licenta.Repositories.GuestAccessTokenRepository;
 import com.example.licenta.Repositories.ReservationRepository;
 import com.example.licenta.Repositories.UserRepository;
 import com.stripe.exception.StripeException;
@@ -12,7 +14,7 @@ import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
-import com.stripe.model.SetupIntent; // Added import for SetupIntent
+import com.stripe.model.SetupIntent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -34,6 +37,9 @@ public class StripeWebhookService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private GuestAccessTokenRepository guestAccessTokenRepository;
 
     @Autowired
     private EmailService emailService;
@@ -54,8 +60,26 @@ public class StripeWebhookService {
 
             log.info("Processing payment_intent.succeeded webhook for PaymentIntent: {}", paymentIntent.getId());
 
+            // Try to find reservation by PaymentIntent ID first (more reliable)
             Optional<Reservation> reservationOpt = reservationRepository.findByStripePaymentIntentId(paymentIntent.getId());
-            if (!reservationOpt.isPresent()) {
+
+            // Fallback to metadata if direct lookup fails
+            if (reservationOpt.isEmpty()) {
+                String reservationId = paymentIntent.getMetadata().get("reservation_id");
+                if (reservationId != null) {
+                    reservationOpt = reservationRepository.findById(reservationId);
+                    if (reservationOpt.isPresent()) {
+                        // Update the reservation with the PaymentIntent ID if it wasn't set
+                        Reservation reservation = reservationOpt.get();
+                        if (reservation.getStripePaymentIntentId() == null) {
+                            reservation.setStripePaymentIntentId(paymentIntent.getId());
+                            reservationRepository.save(reservation);
+                        }
+                    }
+                }
+            }
+
+            if (reservationOpt.isEmpty()) {
                 log.warn("No reservation found for PaymentIntent: {} (Event ID: {})", paymentIntent.getId(), event.getId());
                 return;
             }
@@ -64,8 +88,6 @@ public class StripeWebhookService {
 
             if (reservation.getStatus() == ReservationStatus.PAID) {
                 log.info("Reservation {} already in PAID status. Idempotent processing for PaymentIntent: {}", reservation.getId(), paymentIntent.getId());
-                // Even if PAID, owner earnings might not have been processed if charge.succeeded comes later
-                // or if there was a previous failure. We let charge.succeeded handle earnings.
                 return;
             }
 
@@ -75,22 +97,25 @@ public class StripeWebhookService {
             }
 
             reservation.setStatus(ReservationStatus.PAID);
+            reservation.setUpdatedAt(OffsetDateTime.now());
             log.info("Updated reservation {} status to PAID via PaymentIntent webhook for PaymentIntent: {}", reservation.getId(), paymentIntent.getId());
 
             handleLoyaltyPoints(reservation, paymentIntent);
             handlePaymentMethodSaving(reservation, paymentIntent);
 
-            reservationRepository.save(reservation);
-            sendPaymentConfirmationEmail(reservation);
+            Reservation savedReservation = reservationRepository.save(reservation);
+
+            // Handle post-payment logic based on reservation type
+            handlePostPaymentSuccess(savedReservation, paymentIntent);
 
             log.info("Successfully processed payment_intent.succeeded for reservation: {} (PaymentIntent: {})", reservation.getId(), paymentIntent.getId());
 
         } catch (Exception e) {
             log.error("Error processing payment_intent.succeeded webhook for event ID: " + event.getId(), e);
+            throw e; // Re-throw to trigger webhook retry
         }
     }
 
-    // Existing Enhanced SetupIntent succeeded handler
     public void handleSetupIntentSucceeded(Event event) {
         try {
             SetupIntent setupIntent = (SetupIntent) event.getDataObjectDeserializer().getObject().orElse(null);
@@ -101,7 +126,25 @@ public class StripeWebhookService {
 
             log.info("Processing setup_intent.succeeded webhook for SetupIntent: {}", setupIntent.getId());
 
+            // Try to find reservation by SetupIntent ID first (more reliable)
             Optional<Reservation> reservationOpt = reservationRepository.findByStripeSetupIntentId(setupIntent.getId());
+
+            // Fallback to metadata if direct lookup fails
+            if (reservationOpt.isEmpty()) {
+                String reservationId = setupIntent.getMetadata().get("reservation_id");
+                if (reservationId != null) {
+                    reservationOpt = reservationRepository.findById(reservationId);
+                    if (reservationOpt.isPresent()) {
+                        // Update the reservation with the SetupIntent ID if it wasn't set
+                        Reservation reservation = reservationOpt.get();
+                        if (reservation.getStripeSetupIntentId() == null) {
+                            reservation.setStripeSetupIntentId(setupIntent.getId());
+                            reservationRepository.save(reservation);
+                        }
+                    }
+                }
+            }
+
             if (!reservationOpt.isPresent()) {
                 log.warn("No reservation found for SetupIntent: {} (Event ID: {})", setupIntent.getId(), event.getId());
                 return;
@@ -122,39 +165,44 @@ public class StripeWebhookService {
             String paymentMethodId = setupIntent.getPaymentMethod();
             if (paymentMethodId == null) {
                 log.error("SetupIntent {} succeeded but no PaymentMethod ID found. Setting reservation {} to PAYMENT_FAILED.", setupIntent.getId(), reservation.getId());
-                reservation.setStatus(ReservationStatus.PAYMENT_FAILED); // Or a more specific setup failure status
+                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+                reservation.setUpdatedAt(OffsetDateTime.now());
                 reservationRepository.save(reservation);
                 return;
             }
 
-            // The field name in Reservation model seems to be 'savedPaymentMethodId' based on your ReservationService code
-            reservation.setSavedPaymentMethodId(paymentMethodId);
-            // Also update stripePaymentMethodId if you have it and intend to use it consistently
-            // reservation.setStripePaymentMethodId(paymentMethodId);
-            reservation.setStatus(ReservationStatus.ACTIVE);
-            reservation.setStripeClientSecret(null); // Clear client secret
+            // For PAY_FOR_USAGE reservations, activate them when setup succeeds
+            if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE) {
+                reservation.setSavedPaymentMethodId(paymentMethodId);
+                reservation.setStatus(ReservationStatus.ACTIVE);
+                reservation.setStartTime(OffsetDateTime.now());
+                reservation.setUpdatedAt(OffsetDateTime.now());
+                reservation.setStripeClientSecret(null); // Clear client secret
 
-            log.info("Updated reservation {} status to ACTIVE via SetupIntent webhook for SetupIntent: {}", reservation.getId(), setupIntent.getId());
+                log.info("Updated reservation {} status to ACTIVE via SetupIntent webhook for SetupIntent: {}", reservation.getId(), setupIntent.getId());
 
-
-            if (reservation.getStripeCustomerId() != null) {
-                try {
-                    stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodId);
-                    log.info("Set payment method {} as default for customer {} for reservation {}", paymentMethodId, reservation.getStripeCustomerId(), reservation.getId());
-                } catch (Exception e) {
-                    log.error("Failed to set default payment method {} for customer {} (reservation {}): {}", paymentMethodId, reservation.getStripeCustomerId(), reservation.getId(), e.getMessage());
+                if (reservation.getStripeCustomerId() != null) {
+                    try {
+                        stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodId);
+                        log.info("Set payment method {} as default for customer {} for reservation {}", paymentMethodId, reservation.getStripeCustomerId(), reservation.getId());
+                    } catch (Exception e) {
+                        log.error("Failed to set default payment method {} for customer {} (reservation {}): {}", paymentMethodId, reservation.getStripeCustomerId(), reservation.getId(), e.getMessage());
+                    }
+                } else {
+                    log.warn("Cannot set default payment method for reservation {} as StripeCustomerId is null.", reservation.getId());
                 }
-            } else {
-                log.warn("Cannot set default payment method for reservation {} as StripeCustomerId is null.", reservation.getId());
+
+                Reservation savedReservation = reservationRepository.save(reservation);
+
+                // Send activation email for PAY_FOR_USAGE
+                handlePayForUsageActivation(savedReservation);
+
+                log.info("Successfully activated PAY_FOR_USAGE reservation: {}", reservation.getId());
             }
-
-            reservationRepository.save(reservation);
-            sendPayForUsageActivationEmail(reservation);
-
-            log.info("Successfully processed setup_intent.succeeded for reservation: {} (SetupIntent: {})", reservation.getId(), setupIntent.getId());
 
         } catch (Exception e) {
             log.error("Error processing setup_intent.succeeded webhook for event ID: " + event.getId(), e);
+            throw e; // Re-throw to trigger webhook retry
         }
     }
 
@@ -175,6 +223,12 @@ public class StripeWebhookService {
 
             String paymentIntentId = charge.getPaymentIntent();
             if (paymentIntentId == null) {
+                // Additional charge processing if needed for charges not associated with PaymentIntents
+                String reservationId = charge.getMetadata().get("reservation_id");
+                if (reservationId != null) {
+                    log.info("Charge succeeded for reservation: {} with amount: {}",
+                            reservationId, charge.getAmount());
+                }
                 log.warn("Charge {} has no associated PaymentIntent. Cannot process owner earnings. (Event ID: {})", charge.getId(), event.getId());
                 return;
             }
@@ -200,9 +254,60 @@ public class StripeWebhookService {
 
         } catch (Exception e) {
             log.error("Error processing charge.succeeded webhook for event ID: " + event.getId(), e);
+            // Non-critical for charge.succeeded, don't re-throw
         }
     }
 
+    public void handlePaymentIntentPaymentFailed(Event event) {
+        try {
+            PaymentIntent paymentIntent = (PaymentIntent) event.getDataObjectDeserializer().getObject().orElse(null);
+            if (paymentIntent == null) {
+                log.error("Could not deserialize PaymentIntent from webhook event for event ID: {}", event.getId());
+                return;
+            }
+
+            log.info("Processing payment_intent.payment_failed webhook for PaymentIntent: {}", paymentIntent.getId());
+
+            // Try to find reservation by PaymentIntent ID first (more reliable)
+            Optional<Reservation> reservationOpt = reservationRepository.findByStripePaymentIntentId(paymentIntent.getId());
+
+            // Fallback to metadata if direct lookup fails
+            if (!reservationOpt.isPresent()) {
+                String reservationId = paymentIntent.getMetadata().get("reservation_id");
+                if (reservationId != null) {
+                    reservationOpt = reservationRepository.findById(reservationId);
+                }
+            }
+
+            if (!reservationOpt.isPresent()) {
+                log.warn("No reservation found for PaymentIntent: {} (Event ID: {})", paymentIntent.getId(), event.getId());
+                return;
+            }
+
+            Reservation reservation = reservationOpt.get();
+
+            if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
+                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+                reservation.setUpdatedAt(OffsetDateTime.now());
+                reservation.setStripeClientSecret(null); // Clear any client secret
+                reservationRepository.save(reservation);
+                log.info("Updated reservation {} status to PAYMENT_FAILED via PaymentIntent webhook. Last Payment Error: {}",
+                        reservation.getId(), paymentIntent.getLastPaymentError() != null ? paymentIntent.getLastPaymentError().getMessage() : "N/A");
+
+                // Send payment failed notification
+                sendPaymentFailedNotification(reservation);
+            } else {
+                log.warn("Reservation {} for PaymentIntent {} was not in PENDING_PAYMENT status (current: {}). No status change made for payment failure.",
+                        reservation.getId(), paymentIntent.getId(), reservation.getStatus());
+            }
+
+            log.info("Successfully processed payment_intent.payment_failed for reservation: {}", reservation.getId());
+
+        } catch (Exception e) {
+            log.error("Error processing payment_intent.payment_failed webhook for event ID: " + event.getId(), e);
+            throw e; // Re-throw to trigger webhook retry
+        }
+    }
 
     /**
      * Handles the 'setup_intent.setup_failed' Stripe webhook event.
@@ -219,7 +324,17 @@ public class StripeWebhookService {
 
             log.info("Processing setup_intent.setup_failed webhook for SetupIntent: {}", setupIntent.getId());
 
+            // Try to find reservation by SetupIntent ID first (more reliable)
             Optional<Reservation> reservationOpt = reservationRepository.findByStripeSetupIntentId(setupIntent.getId());
+
+            // Fallback to metadata if direct lookup fails
+            if (!reservationOpt.isPresent()) {
+                String reservationId = setupIntent.getMetadata().get("reservation_id");
+                if (reservationId != null) {
+                    reservationOpt = reservationRepository.findById(reservationId);
+                }
+            }
+
             if (!reservationOpt.isPresent()) {
                 log.warn("No reservation found for SetupIntent: {} (Event ID: {})", setupIntent.getId(), event.getId());
                 return;
@@ -229,61 +344,127 @@ public class StripeWebhookService {
 
             // Only update if it was pending setup. Avoid overriding other terminal states.
             if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
-                reservation.setStatus(ReservationStatus.PAYMENT_FAILED); // Or a more specific status like SETUP_FAILED
+                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+                reservation.setUpdatedAt(OffsetDateTime.now());
                 reservation.setStripeClientSecret(null); // Clear any client secret
                 reservationRepository.save(reservation);
                 log.info("Updated reservation {} status to PAYMENT_FAILED due to SetupIntent {} failure. Last Setup Error: {}",
                         reservation.getId(), setupIntent.getId(), setupIntent.getLastSetupError() != null ? setupIntent.getLastSetupError().getMessage() : "N/A");
-
-                // Optionally, send a notification to the user about the setup failure
-                // emailService.sendSetupFailedEmail(reservation.getGuestEmail() or user.getEmail(), reservation.getId());
-
             } else {
                 log.warn("Reservation {} for SetupIntent {} was not in PENDING_PAYMENT status (current: {}). No status change made for setup failure.",
                         reservation.getId(), setupIntent.getId(), reservation.getStatus());
             }
 
+            log.info("Successfully processed setup_intent.setup_failed for reservation: {}", reservation.getId());
+
         } catch (Exception e) {
             log.error("Error processing setup_intent.setup_failed webhook for event ID: " + event.getId(), e);
+            throw e; // Re-throw to trigger webhook retry
         }
     }
 
+    private void handlePostPaymentSuccess(Reservation reservation, PaymentIntent paymentIntent) {
+        User user = reservation.getUser();
+        ParkingLot parkingLot = reservation.getParkingLot();
 
-    // Existing method to handle payment failures
-    public void handlePaymentIntentPaymentFailed(Event event) {
-        try {
-            PaymentIntent paymentIntent = (PaymentIntent) event.getDataObjectDeserializer().getObject().orElse(null);
-            if (paymentIntent == null) {
-                log.error("Could not deserialize PaymentIntent from webhook event for event ID: {}", event.getId());
-                return;
-            }
+        if (user != null && reservation.getPointsUsed() != null && reservation.getPointsUsed() > 0) {
+            Double currentPoints = user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0.0;
+            user.setLoyaltyPoints(currentPoints - reservation.getPointsUsed());
+            userRepository.save(user);
+        }
 
-            log.info("Processing payment_intent.payment_failed webhook for PaymentIntent: {}", paymentIntent.getId());
+        sendConfirmationEmail(reservation, user, parkingLot);
 
-            Optional<Reservation> reservationOpt = reservationRepository.findByStripePaymentIntentId(paymentIntent.getId());
-            if (!reservationOpt.isPresent()) {
-                log.warn("No reservation found for PaymentIntent: {} (Event ID: {})", paymentIntent.getId(), event.getId());
-                return;
-            }
+        switch (reservation.getReservationType()) {
+            case STANDARD:
+            case DIRECT:
+                break;
+            case PAY_FOR_USAGE:
+                break;
+        }
+    }
 
-            Reservation reservation = reservationOpt.get();
+    private void handlePayForUsageActivation(Reservation reservation) {
+        User user = reservation.getUser();
+        ParkingLot parkingLot = reservation.getParkingLot();
 
-            if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT) {
-                reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
-                reservation.setStripeClientSecret(null); // Clear any client secret
-                reservationRepository.save(reservation);
-                log.info("Updated reservation {} status to PAYMENT_FAILED via PaymentIntent webhook. Last Payment Error: {}",
-                        reservation.getId(), paymentIntent.getLastPaymentError() != null ? paymentIntent.getLastPaymentError().getMessage() : "N/A");
+        String recipientEmail = (user != null && user.getEmail() != null)
+                ? user.getEmail()
+                : reservation.getGuestEmail();
 
-                // Optionally, send a notification to the user about the payment failure
-                // emailService.sendPaymentFailedEmail(reservation.getGuestEmail() or user.getEmail(), reservation.getId());
-            } else {
-                log.warn("Reservation {} for PaymentIntent {} was not in PENDING_PAYMENT status (current: {}). No status change made for payment failure.",
-                        reservation.getId(), paymentIntent.getId(), reservation.getStatus());
-            }
+        String guestAccessTokenString = null;
+        if (user == null && parkingLot != null) {
+            guestAccessTokenString = generateOrUpdateGuestToken(reservation, null).getToken();
+        }
 
-        } catch (Exception e) {
-            log.error("Error processing payment_intent.payment_failed webhook for event ID: " + event.getId(), e);
+        if (recipientEmail != null && !recipientEmail.isEmpty() && parkingLot != null) {
+            emailService.sendPayForUsageActiveEmail(
+                    recipientEmail,
+                    reservation.getId(),
+                    parkingLot.getName(),
+                    reservation.getStartTime(),
+                    guestAccessTokenString
+            );
+        }
+    }
+
+    private void sendConfirmationEmail(Reservation reservation, User user, ParkingLot parkingLot) {
+        String recipientEmail = (user != null && user.getEmail() != null)
+                ? user.getEmail()
+                : reservation.getGuestEmail();
+
+        String guestAccessTokenString = null;
+        if (user == null && parkingLot != null) {
+            OffsetDateTime tokenExpiry = reservation.getEndTime() != null
+                    ? reservation.getEndTime().plusHours(1)
+                    : OffsetDateTime.now(ZoneOffset.UTC).plusHours(24);
+            guestAccessTokenString = generateOrUpdateGuestToken(reservation, tokenExpiry).getToken();
+        }
+
+        if (recipientEmail != null && !recipientEmail.isEmpty() && parkingLot != null) {
+            emailService.sendReservationConfirmationEmail(
+                    recipientEmail,
+                    reservation.getId(),
+                    parkingLot.getName(),
+                    reservation.getStartTime(),
+                    reservation.getEndTime(),
+                    reservation.getFinalAmount(),
+                    guestAccessTokenString
+            );
+        }
+    }
+
+    private void sendPaymentFailedNotification(Reservation reservation) {
+        User user = reservation.getUser();
+        String recipientEmail = (user != null && user.getEmail() != null)
+                ? user.getEmail()
+                : reservation.getGuestEmail();
+
+//        if (recipientEmail != null && !recipientEmail.isEmpty()) {
+//            emailService.sendPaymentFailedEmail(
+//                    recipientEmail,
+//                    reservation.getId(),
+//                    reservation.getParkingLot().getName()
+//            );
+//        }
+    }
+
+    private GuestAccessToken generateOrUpdateGuestToken(Reservation reservation, OffsetDateTime expiresAt) {
+        Optional<GuestAccessToken> existingTokenOpt = guestAccessTokenRepository
+                .findByReservationId(reservation.getId());
+
+        if (existingTokenOpt.isPresent()) {
+            GuestAccessToken existingToken = existingTokenOpt.get();
+            existingToken.setToken(UUID.randomUUID().toString());
+            existingToken.setExpiresAt(expiresAt);
+            return guestAccessTokenRepository.save(existingToken);
+        } else {
+            GuestAccessToken newToken = GuestAccessToken.builder()
+                    .token(UUID.randomUUID().toString())
+                    .reservation(reservation)
+                    .expiresAt(expiresAt)
+                    .build();
+            return guestAccessTokenRepository.save(newToken);
         }
     }
 
@@ -298,17 +479,15 @@ public class StripeWebhookService {
         User owner = parkingLot.getOwner();
 
         // Check if earnings already processed for this reservation to ensure idempotency
-        // Assuming Reservation model has a boolean field like 'ownerEarningsProcessed'
         if (reservation.getOwnerEarningsProcessed() != null && reservation.getOwnerEarningsProcessed()) {
             log.info("Owner earnings already processed for reservation {} (Charge: {}). Skipping.", reservation.getId(), charge.getId());
             return;
         }
 
-        Double finalAmountPaidByCustomer = reservation.getFinalAmount(); // Amount customer paid after discounts/points
+        Double finalAmountPaidByCustomer = reservation.getFinalAmount();
         if (finalAmountPaidByCustomer == null || finalAmountPaidByCustomer <= 0) {
             log.info("Reservation {} (Charge: {}) has zero or negative final amount ({}). No earnings to process for owner.",
                     reservation.getId(), charge.getId(), finalAmountPaidByCustomer);
-            // Mark as processed even if zero, to prevent reprocessing
             reservation.setOwnerEarningsProcessed(true);
             reservationRepository.save(reservation);
             return;
@@ -352,26 +531,20 @@ public class StripeWebhookService {
         if (charge.getBalanceTransaction() != null) {
             try {
                 BalanceTransaction balanceTransaction = BalanceTransaction.retrieve(charge.getBalanceTransaction());
-                // Net amount is in the smallest currency unit (e.g., bani for RON)
                 double netFromStripe = balanceTransaction.getNet() / 100.0;
                 log.info("Net amount from Stripe BalanceTransaction {} for Charge {}: {}", balanceTransaction.getId(), charge.getId(), netFromStripe);
                 return BigDecimal.valueOf(netFromStripe).setScale(2, RoundingMode.HALF_UP).doubleValue();
             } catch (StripeException e) {
                 log.error("Failed to retrieve BalanceTransaction {} for Charge {}: {}. Falling back to estimate.",
                         charge.getBalanceTransaction(), charge.getId(), e.getMessage());
-                // Fallback: Apply a generic estimated platform fee if BalanceTransaction fails.
-                // This is a rough estimate and should be adjusted based on actual fee structure.
-                // Consider a configurable fee percentage.
-                return BigDecimal.valueOf(finalAmountPaidByCustomer * 0.95).setScale(2, RoundingMode.HALF_UP).doubleValue(); // Example: 5% fee
+                return BigDecimal.valueOf(finalAmountPaidByCustomer * 0.95).setScale(2, RoundingMode.HALF_UP).doubleValue();
             }
         } else {
             log.warn("Charge {} does not have a BalanceTransaction ID. Falling back to estimate net amount for owner.", charge.getId());
-            return BigDecimal.valueOf(finalAmountPaidByCustomer * 0.95).setScale(2, RoundingMode.HALF_UP).doubleValue(); // Example: 5% fee
+            return BigDecimal.valueOf(finalAmountPaidByCustomer * 0.95).setScale(2, RoundingMode.HALF_UP).doubleValue();
         }
     }
 
-
-    // Existing helper methods
     private void handleLoyaltyPoints(Reservation reservation, PaymentIntent paymentIntent) {
         User user = reservation.getUser();
         if (user == null) return;
@@ -386,10 +559,7 @@ public class StripeWebhookService {
         }
 
         if (finalAmountPaid > 0) {
-            // Example: 5 points per 1 unit of currency spent (adjust as needed)
-            // If 1 point = 0.1 currency unit, then 1 currency unit = 10 points.
-            // If points are awarded as 5% of amount paid:
-            double pointsToAdd = finalAmountPaid * 0.05; // This was in your ReservationService
+            double pointsToAdd = finalAmountPaid * 0.05;
             BigDecimal pointsToAddBD = BigDecimal.valueOf(pointsToAdd).setScale(2, RoundingMode.HALF_UP);
             Double currentPoints = Optional.ofNullable(user.getLoyaltyPoints()).orElse(0.0);
             user.setLoyaltyPoints(currentPoints + pointsToAddBD.doubleValue());
@@ -400,25 +570,19 @@ public class StripeWebhookService {
 
     private void handlePaymentMethodSaving(Reservation reservation, PaymentIntent paymentIntent) {
         String paymentMethodId = paymentIntent.getPaymentMethod();
-        // Check if setup_future_usage was set on the PaymentIntent
         String setupFutureUsage = paymentIntent.getSetupFutureUsage();
 
         if (paymentMethodId != null && setupFutureUsage != null && !setupFutureUsage.isEmpty()) {
             if (reservation.getUser() != null && reservation.getStripeCustomerId() != null) {
                 try {
-                    // The payment method is already attached to the customer by Stripe if setup_future_usage was used.
-                    // We just need to set it as default if that's the desired behavior.
                     stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), paymentMethodId);
                     log.info("Set payment method {} as default for customer {} (Reservation {}) due to setup_future_usage",
                             paymentMethodId, reservation.getStripeCustomerId(), reservation.getId());
 
-                    // If it's a Pay For Usage reservation and the saved payment method isn't set yet,
-                    // or if you want to update it with the latest one used with setup_future_usage.
                     if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE) {
                         if (reservation.getSavedPaymentMethodId() == null || !reservation.getSavedPaymentMethodId().equals(paymentMethodId)) {
                             reservation.setSavedPaymentMethodId(paymentMethodId);
                             log.info("Updated savedPaymentMethodId to {} for PFU reservation {}", paymentMethodId, reservation.getId());
-                            // No need to save reservation here, as the calling method will save it.
                         }
                     }
                 } catch (Exception e) {
@@ -426,69 +590,6 @@ public class StripeWebhookService {
                             paymentMethodId, reservation.getStripeCustomerId(), reservation.getId(), e.getMessage());
                 }
             }
-        }
-    }
-
-    private void sendPaymentConfirmationEmail(Reservation reservation) {
-        User user = reservation.getUser();
-        ParkingLot parkingLot = reservation.getParkingLot();
-        String recipientEmail = (user != null && user.getEmail() != null) ? user.getEmail() : reservation.getGuestEmail();
-
-        if (recipientEmail != null && !recipientEmail.isEmpty() && parkingLot != null) {
-            String guestToken = null;
-            if (user == null) { // For guest reservations
-                OffsetDateTime tokenExpiry = reservation.getEndTime() != null ?
-                        reservation.getEndTime().plusHours(1) : OffsetDateTime.now(ZoneOffset.UTC).plusHours(24);
-                // Assuming generateOrUpdateGuestToken is public or accessible within the same package,
-                // or ReservationService is injected. It is injected.
-                try {
-                    guestToken = reservationService.generateOrUpdateGuestToken(reservation, tokenExpiry).getToken();
-                } catch (Exception e) {
-                    log.error("Failed to generate guest token for reservation {}: {}", reservation.getId(), e.getMessage());
-                }
-            }
-
-            emailService.sendReservationConfirmationEmail(
-                    recipientEmail,
-                    reservation.getId(),
-                    parkingLot.getName(),
-                    reservation.getStartTime(),
-                    reservation.getEndTime(),
-                    reservation.getFinalAmount(),
-                    guestToken
-            );
-            log.info("Sent payment confirmation email for reservation {} to {}", reservation.getId(), recipientEmail);
-        } else {
-            log.warn("Could not send payment confirmation email for reservation {}: recipient or parking lot missing.", reservation.getId());
-        }
-    }
-
-    private void sendPayForUsageActivationEmail(Reservation reservation) {
-        User user = reservation.getUser();
-        ParkingLot parkingLot = reservation.getParkingLot();
-        String recipientEmail = (user != null && user.getEmail() != null) ? user.getEmail() : reservation.getGuestEmail();
-
-        if (recipientEmail != null && !recipientEmail.isEmpty() && parkingLot != null) {
-            String guestToken = null;
-            if (user == null) { // For guest PFU reservations
-                try {
-                    // PFU active tokens might not need an expiry or a very long one
-                    guestToken = reservationService.generateOrUpdateGuestToken(reservation, null).getToken();
-                } catch (Exception e) {
-                    log.error("Failed to generate guest token for PFU activation email for reservation {}: {}", reservation.getId(), e.getMessage());
-                }
-            }
-
-            emailService.sendPayForUsageActiveEmail(
-                    recipientEmail,
-                    reservation.getId(),
-                    parkingLot.getName(),
-                    reservation.getStartTime(),
-                    guestToken // guestToken can be null if it's a registered user or token generation failed
-            );
-            log.info("Sent PFU activation email for reservation {} to {}", reservation.getId(), recipientEmail);
-        } else {
-            log.warn("Could not send PFU activation email for reservation {}: recipient or parking lot missing.", reservation.getId());
         }
     }
 }

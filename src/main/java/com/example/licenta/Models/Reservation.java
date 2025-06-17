@@ -53,6 +53,12 @@ public class Reservation {
     @Column(name = "end_time")
     private OffsetDateTime endTime;
 
+    @Column(name = "original_end_time")
+    private OffsetDateTime originalEndTime;
+
+    @Column(name = "extended_time_minutes")
+    private Long extendedTimeMinutes = 0L;
+
     @NotNull
     @Column(name = "vehicle_plate", nullable = false)
     private String vehiclePlate;
@@ -105,6 +111,15 @@ public class Reservation {
     @Column(name = "stripe_payment_intent_id")
     private String stripePaymentIntentId;
 
+    @Column(name = "stripe_extension_payment_intent_id")
+    private String stripeExtensionPaymentIntentId;
+
+    @Column(name = "stripe_refund_id")
+    private String stripeRefundId;
+
+    @Column(name = "refund_amount")
+    private Double refundAmount;
+
     @Column(name = "owner_earnings_processed")
     private Boolean ownerEarningsProcessed = false;
 
@@ -118,6 +133,9 @@ public class Reservation {
     protected void onCreate() {
         createdAt = OffsetDateTime.now();
         updatedAt = OffsetDateTime.now();
+        if (originalEndTime == null && endTime != null) {
+            originalEndTime = endTime;
+        }
     }
 
     @PreUpdate
