@@ -1115,7 +1115,9 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO endActivePayForUsageReservationAndInitiatePayment(String reservationId, OffsetDateTime endTime, Double totalAmount) {
+    public ReservationDTO endActivePayForUsageReservationAndInitiatePayment(String reservationId) {
+        OffsetDateTime endTime = OffsetDateTime.now();
+
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
@@ -1125,10 +1127,22 @@ public class ReservationService {
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw new InvalidDataException("Only active PAY_FOR_USAGE reservations can be ended. Current status: " + reservation.getStatus());
         }
-
         if (reservation.getSavedPaymentMethodId() == null) {
-            throw new IllegalStateException("No saved payment method found for this reservation");
+            throw new IllegalStateException("No saved payment method found for this reservation. Cannot proceed with payment.");
         }
+        if (reservation.getParkingLot() == null || reservation.getParkingLot().getId() == null) {
+            throw new IllegalStateException("Parking lot information is missing for this reservation. Cannot calculate price.");
+        }
+        if (reservation.getStartTime() == null) {
+            throw new IllegalStateException("Start time is missing for this reservation. Cannot calculate price.");
+        }
+
+        if (endTime.isBefore(reservation.getStartTime())) {
+            throw new InvalidDataException("Calculated end time is before the reservation start time. Cannot calculate a valid price.");
+        }
+
+        Double totalAmount = calculatePrice(reservation.getParkingLot().getId(), reservation.getStartTime(), endTime);
+        totalAmount = Math.max(0.0, totalAmount);
 
         reservation.setEndTime(endTime);
         reservation.setTotalAmount(totalAmount);
@@ -1150,24 +1164,21 @@ public class ReservationService {
             );
 
             reservation.setStripePaymentIntentId(stripeResponse.getIntentId());
-            reservation.setFinalAmount(totalAmount);
-            reservation.setPointsUsed(0.0);
-            reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
+            reservation.setFinalAmount(totalAmount); // Final amount after calculation
+            reservation.setPointsUsed(0.0); // Assuming no points used for PFU auto-ending, or this logic needs to be added
+            reservation.setStatus(ReservationStatus.PENDING_PAYMENT); // Initial status before Stripe confirmation
 
             Reservation updatedReservation = reservationRepository.save(reservation);
             ReservationDTO dto = reservationMapper.toDTO(updatedReservation);
 
-            // Let webhooks handle success/failure - just return the current state with client secret if needed
             if ("requires_action".equals(stripeResponse.getStatus()) || "requires_confirmation".equals(stripeResponse.getStatus())) {
                 dto.setStripeClientSecret(stripeResponse.getClientSecret());
                 dto.setStripeOperationType("PAYMENT_INTENT_REQUIRES_ACTION");
             } else if ("processing".equals(stripeResponse.getStatus())) {
                 dto.setStripeOperationType("PAYMENT_INTENT_PROCESSING");
             } else if ("requires_payment_method".equals(stripeResponse.getStatus())) {
-                // Webhook will handle setting to PAYMENT_FAILED
                 dto.setStripeOperationType("PAYMENT_INTENT_REQUIRES_NEW_PAYMENT_METHOD");
             } else {
-                // "succeeded" or other statuses - webhook will handle the rest
                 dto.setStripeOperationType("PAYMENT_INTENT_" + stripeResponse.getStatus().toUpperCase());
             }
 
@@ -1176,6 +1187,10 @@ public class ReservationService {
             reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
             reservationRepository.save(reservation);
             throw new PaymentProcessingException("Payment processing failed for Pay For Usage session: " + e.getMessage());
+        } catch (Exception e) {
+            reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
+            reservationRepository.save(reservation);
+            throw new RuntimeException("An unexpected error occurred while ending Pay For Usage session: " + e.getMessage(), e);
         }
     }
 

@@ -306,12 +306,10 @@ public class ReservationController {
         private Double totalAmount;
     }
 
-
     @PostMapping("/{reservationId}/end-pay-for-usage")
     public ResponseEntity<ApiResponse<ReservationDTO>> endPayForUsageAndInitiatePayment(
-            @PathVariable String reservationId,
-            @Valid @RequestBody EndPayForUsageRequest request) {
-        ReservationDTO reservationDTO = reservationService.endActivePayForUsageReservationAndInitiatePayment(reservationId, request.getEndTime(), request.getTotalAmount());
+            @PathVariable String reservationId) {
+        ReservationDTO reservationDTO = reservationService.endActivePayForUsageReservationAndInitiatePayment(reservationId);
         ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage session ended. Payment initiated.", reservationDTO);
         return ResponseEntity.ok(response);
     }
