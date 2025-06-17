@@ -1101,7 +1101,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public ReservationDTO endActivePayForUsageReservationAndInitiatePayment(String reservationId) {
+    public ReservationDTO endActivePayForUsageReservationAndInitiatePayment(String reservationId, Double pointsToUseFromClientRequest) {
         OffsetDateTime endTime = OffsetDateTime.now();
 
         Reservation reservation = reservationRepository.findById(reservationId)
@@ -1111,7 +1111,7 @@ public class ReservationService {
             throw new InvalidDataException("This method is only for ending PAY_FOR_USAGE reservations.");
         }
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
-            throw new InvalidDataException("Only active PAY_FOR_USAGE reservations can be ended. Current status: " + reservation.getStatus());
+            throw new InvalidDataException("Only active PAY_FOR_USAGE reservations can be ended.");
         }
         if (reservation.getSavedPaymentMethodId() == null) {
             throw new IllegalStateException("No saved payment method found for this reservation. Cannot proceed with payment.");
@@ -1122,24 +1122,45 @@ public class ReservationService {
         if (reservation.getStartTime() == null) {
             throw new IllegalStateException("Start time is missing for this reservation. Cannot calculate price.");
         }
-
         if (endTime.isBefore(reservation.getStartTime())) {
-            throw new InvalidDataException("Calculated end time is before the reservation start time. Cannot calculate a valid price.");
+            throw new InvalidDataException("Calculated end time ("+ endTime +") is before the reservation start time ("+ reservation.getStartTime() +"). Cannot calculate a valid price.");
         }
 
-        Double totalAmount = calculatePrice(reservation.getParkingLot().getId(), reservation.getStartTime(), endTime);
-        totalAmount = Math.max(0.0, totalAmount);
+        Double initialTotalAmount = calculatePrice(reservation.getParkingLot().getId(), reservation.getStartTime(), endTime);
+        initialTotalAmount = Math.max(0.0, initialTotalAmount);
 
         reservation.setEndTime(endTime);
-        reservation.setTotalAmount(totalAmount);
+        reservation.setTotalAmount(initialTotalAmount);
 
-        if (totalAmount <= 0) {
-            return completeZeroOrNegativePfuPayment(reservation, reservation.getUser(), reservation.getParkingLot(), totalAmount);
+        User user = reservation.getUser();
+
+        if (user != null && pointsToUseFromClientRequest != null && pointsToUseFromClientRequest > 0 && initialTotalAmount > 0) {
+            validateUserPoints(user, pointsToUseFromClientRequest);
+        }
+
+        Double finalAmountToCharge = calculateFinalAmount(initialTotalAmount, pointsToUseFromClientRequest);
+
+        if (user != null && pointsToUseFromClientRequest > 0) {
+            user.setLoyaltyPoints(user.getLoyaltyPoints() - pointsToUseFromClientRequest);
+        }
+
+        reservation.setPointsUsed(pointsToUseFromClientRequest);
+        reservation.setFinalAmount(finalAmountToCharge);
+
+        if (finalAmountToCharge <= 0) {
+            if (user != null && pointsToUseFromClientRequest > 0) {
+                userRepository.save(user);
+            }
+            return completeZeroOrNegativePfuPayment(reservation, user, reservation.getParkingLot(), finalAmountToCharge);
         }
 
         try {
-            long amountToChargeInSmallestUnit = Math.round(totalAmount * 100);
-            Map<String, String> paymentIntentMetadata = createPaymentMetadata(reservation, reservation.getUser(), reservation.getParkingLot());
+            if (user != null && pointsToUseFromClientRequest > 0) {
+                userRepository.save(user);
+            }
+
+            long amountToChargeInSmallestUnit = Math.round(finalAmountToCharge * 100);
+            Map<String, String> paymentIntentMetadata = createPaymentMetadata(reservation, user, reservation.getParkingLot());
 
             StripeIntentResponse stripeResponse = stripeService.createPaymentIntentWithSavedPaymentMethod(
                     amountToChargeInSmallestUnit,
@@ -1150,9 +1171,7 @@ public class ReservationService {
             );
 
             reservation.setStripePaymentIntentId(stripeResponse.getIntentId());
-            reservation.setFinalAmount(totalAmount); // Final amount after calculation
-            reservation.setPointsUsed(0.0); // Assuming no points used for PFU auto-ending, or this logic needs to be added
-            reservation.setStatus(ReservationStatus.PENDING_PAYMENT); // Initial status before Stripe confirmation
+            reservation.setStatus(ReservationStatus.PENDING_PAYMENT);
 
             Reservation updatedReservation = reservationRepository.save(reservation);
             ReservationDTO dto = reservationMapper.toDTO(updatedReservation);
@@ -1167,8 +1186,8 @@ public class ReservationService {
             } else {
                 dto.setStripeOperationType("PAYMENT_INTENT_" + stripeResponse.getStatus().toUpperCase());
             }
-
             return dto;
+
         } catch (StripeException e) {
             reservation.setStatus(ReservationStatus.PAYMENT_FAILED);
             reservationRepository.save(reservation);

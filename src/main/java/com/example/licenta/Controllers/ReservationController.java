@@ -295,22 +295,14 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
-    public static class EndPayForUsageRequest {
-        @NotNull
-        @Getter
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        private OffsetDateTime endTime;
-
-        @Getter
-        @NotNull
-        private Double totalAmount;
-    }
-
     @PostMapping("/{reservationId}/end-pay-for-usage")
     public ResponseEntity<ApiResponse<ReservationDTO>> endPayForUsageAndInitiatePayment(
-            @PathVariable String reservationId) {
-        ReservationDTO reservationDTO = reservationService.endActivePayForUsageReservationAndInitiatePayment(reservationId);
-        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage session ended. Payment initiated.", reservationDTO);
+            @PathVariable String reservationId,
+            @RequestBody(required = false) PaymentRequestDTO request) {
+
+        Double pointsToUse = (request != null && request.getPointsToUse() != null) ? request.getPointsToUse() : 0.0;
+        ReservationDTO reservationDTO = reservationService.endActivePayForUsageReservationAndInitiatePayment(reservationId, pointsToUse);
+        ApiResponse<ReservationDTO> response = new ApiResponse<>(true, HttpStatus.OK.value(), "Pay for Usage session ended. Payment processing initiated.", reservationDTO);
         return ResponseEntity.ok(response);
     }
 
