@@ -1,5 +1,6 @@
 package com.example.licenta.Repositories;
 
+import com.example.licenta.Enum.ParkingLot.AvailabilityTrackingMethod;
 import com.example.licenta.Enum.ParkingLot.ParkingLotStatus;
 import com.example.licenta.Enum.ParkingLot.PaymentTiming;
 import com.example.licenta.Models.ParkingLot;
@@ -23,7 +24,13 @@ public interface ParkingLotRepository extends JpaRepository<ParkingLot, String> 
 
     Page<ParkingLot> findByAllowReservationsTrue(Pageable pageable);
 
-    Page<ParkingLot> findByAllowReservationsTrueAndPaymentTiming(PaymentTiming paymentTiming, Pageable pageable);
+    List<ParkingLot> findByHasExistingAvailabilitySystemFalseAndSharedWithNonAppUsersIsTrueAndParkingAvailabilityMethod(
+            AvailabilityTrackingMethod parkingAvailabilityMethod
+    );
+
+    @Query("SELECT p FROM ParkingLot p WHERE p.hasExistingAvailabilitySystem = false AND p.isSharedWithNonAppUsers = true AND p.parkingAvailabilityMethod = :method")
+    List<ParkingLot> findEligibleForAiPolling(@Param("method") AvailabilityTrackingMethod method);
+
 
     Page<ParkingLot> findByAllowReservationsTrueAndPaymentTimingEquals(PaymentTiming paymentTiming, Pageable pageable);
 

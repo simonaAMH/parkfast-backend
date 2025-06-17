@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 
 public enum AvailabilityTrackingMethod {
     CAMERA_AI("camera_ai"),
-    HISTORICAL_DATA("historical_data"),
     SENSORS("sensors");
 
     private final String value;
