@@ -956,28 +956,16 @@ public class ReservationService {
         }
 
         try {
-            // This method assumes stripePaymentMethodIdFromFrontend is a valid PM ID already created and confirmed by client.
-            // It's typically used if client provides a PM ID directly, not after a SetupIntent flow from PaymentSheet.
-            // If this is called *after* a SetupIntent success, the PM is already attached by Stripe.
-            // This call might be redundant or for a different flow (e.g., user selects an *already existing* PM from a list).
             stripeService.attachPaymentMethodToCustomer(stripePaymentMethodIdFromFrontend, reservation.getStripeCustomerId());
             stripeService.setDefaultPaymentMethodForCustomer(reservation.getStripeCustomerId(), stripePaymentMethodIdFromFrontend);
 
             reservation.setSavedPaymentMethodId(stripePaymentMethodIdFromFrontend);
 
             boolean statusChangedToActive = false;
-            // If status is PENDING_PAYMENT (meaning client just completed PaymentSheet for SetupIntent,
-            // and confirmClientStripePaymentSuccess has run and set the PM), then activate.
-            // However, confirmClientStripePaymentSuccess should be the one setting status to ACTIVE.
-            // This method might be for a flow where PM is set *without* an immediately preceding SetupIntent flow handled by confirmClientStripePaymentSuccess.
-            // For clarity, confirmClientStripePaymentSuccess should handle setting to ACTIVE after SetupIntent.
             if(reservation.getStatus() == ReservationStatus.PENDING_PAYMENT && reservation.getStripeSetupIntentId() == null) {
-                // Only activate if not coming from a setup intent flow that confirmClient handles.
                 reservation.setStatus(ReservationStatus.ACTIVE);
                 statusChangedToActive = true;
             } else if (reservation.getStatus() == ReservationStatus.PENDING_PAYMENT && reservation.getStripeSetupIntentId() != null) {
-                // This means confirmClientStripePaymentSuccess should have already handled activation.
-                // This path in savePayForUsagePaymentMethod might indicate a logic conflict or it's for updating PM later.
                 System.out.println("savePayForUsagePaymentMethod called for a reservation with a recent SetupIntent. Status should be handled by confirmClientStripePaymentSuccess.");
             }
 
@@ -1007,13 +995,11 @@ public class ReservationService {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found: " + reservationId));
 
-        if (reservation.getReservationType() == ReservationType.PAY_FOR_USAGE) {
-            throw new InvalidDataException("This method is for STANDARD or DIRECT reservations.");
-        }
         if (reservation.getStatus() != ReservationStatus.PENDING_PAYMENT && reservation.getStatus() != ReservationStatus.PAYMENT_FAILED) {
             throw new InvalidDataException("Reservation does not have a valid status for payment initiation. Current status: " + reservation.getStatus());
         }
-        if (reservation.getEndTime() == null && reservation.getReservationType() != ReservationType.PAY_FOR_USAGE) {
+
+        if (reservation.getEndTime() == null) {
             throw new InvalidDataException("Reservation of type " + reservation.getReservationType() + " must have an end time for payment processing.");
         }
 
