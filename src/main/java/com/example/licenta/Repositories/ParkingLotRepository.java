@@ -24,10 +24,6 @@ public interface ParkingLotRepository extends JpaRepository<ParkingLot, String> 
 
     Page<ParkingLot> findByAllowReservationsTrue(Pageable pageable);
 
-    List<ParkingLot> findByHasExistingAvailabilitySystemFalseAndSharedWithNonAppUsersIsTrueAndParkingAvailabilityMethod(
-            AvailabilityTrackingMethod parkingAvailabilityMethod
-    );
-
     @Query("SELECT p FROM ParkingLot p WHERE p.hasExistingAvailabilitySystem = false AND p.isSharedWithNonAppUsers = true AND p.parkingAvailabilityMethod = :method")
     List<ParkingLot> findEligibleForAiPolling(@Param("method") AvailabilityTrackingMethod method);
 
